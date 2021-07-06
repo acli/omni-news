@@ -9,6 +9,8 @@
 # Province probably makes a difference, but language doesn't because this is just the master schedule
 # The schedule is a mess of spans and b's (not even divs) that's completely unreadable on w3m
 
+# https://developer.apple.com/library/archive/documentation/UserExperience/Conceptual/SpeechSynthesisProgrammingGuide/Phonemes/Phonemes.html
+
 # see https://stackoverflow.com/questions/6162484/why-does-modern-perl-avoid-utf-8-by-default for these crazy hacks
 # THERE ARE MORE CRAZY HACKS THERE FOR MORE COMPLEX PROJECTS!!
 use v5.12; # minimal for unicode string feature
@@ -92,8 +94,9 @@ use vars qw( %months %dows );
 
 use vars qw( %channel_pronunciations );
 %channel_pronunciations = (
-  'omni1' => ['Omni One', 'Om Ni One'],
-  'omni2' => ['Omni Two', 'Om Ni Two'],
+  # XXX This is hopeless. The Sin Ji voice cannot pronounce English, but there is no support for English phonemes
+  'omni1' => ['Omni One', 'Omni One'],
+  'omni2' => ['Omni Two', 'Omni Two'],
 );
 
 use vars qw( %chinese_program_name );
@@ -200,7 +203,7 @@ sub communicate ($) {
   if (!$speak_mode_p) {
     printf "%s\n", $s;
   } elsif (macos_p && $chinese_p) {
-    @cmd = ('say', '-v', 'Sin-Ji', $s);
+    @cmd = ('say', '-v', 'Sin-Ji', '--quality', '127', $s);
   } elsif (macos_p) {
     @cmd = ('say', '-v', preferred_English_voice, $s);
   } else {
@@ -497,7 +500,7 @@ GetOptions(
   'I|data-file=s' => \$test_data_file,
   'g|genmon' => \$genmon_mode,
   'n|next' => \$next_mode_p,
-  'speak' => \$speak_mode_p,
+  's|speak' => \$speak_mode_p,
   'w|sysline' => \$sysline_mode,
   'W|what-if=i' => \$now,
   'v|verbose' => \$verbose,
