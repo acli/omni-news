@@ -41,11 +41,15 @@ use vars qw( $now );
 use vars qw( $chinese_p );
 use vars qw( $next_mode_p );
 use vars qw( $speak_mode_p );
+use vars qw( $broadcast_mode_p );
 use vars qw( $preferred_English_voice );
 $lang = 'Cantonese';
 $prov = 'on';
 
-
+use vars qw( $data_dir $temp_file $esd_server );
+$data_dir = "$ENV{HOME}/.cache/omni-news";
+$temp_file = "$data_dir/temp.wav";
+$esd_server = 'pingviini';
 
 sub STATE__INITIAL   () { 'INITIAL' }
 sub STATE__CHANNEL   () { 'CHANNEL' }
@@ -112,6 +116,13 @@ sub show_cmd (\@) {
 	s/"/\\"/;
 	"\"$_\"";
       }: "\"$_\""): /\s/? "'$_'": $_ } @$cmd), "\n" if $debug || $verbose;
+}
+
+sub run_cmd (\@) {
+  my($cmd) = @_;
+  show_cmd @$cmd;
+  my $st = system { $cmd->[0] } @$cmd;
+  die sprintf "Command %s returned exit status %s\n", $cmd->[0], (defined $st? $st: 'null') unless defined $st && $st == 0;
 }
 
 sub format_date ($$$) {
@@ -206,23 +217,26 @@ sub preferred_English_voice () {
 sub communicate ($) {
   my($s) = @_;
   my @cmd;
+  my @opts = ('--file-format', 'WAVE', '--data-format', 'ulaw', '-o', $temp_file) if $broadcast_mode_p;
   if (!$speak_mode_p) {
     printf "%s\n", $s;
   } elsif (macos_p && $chinese_p) {
-    @cmd = ('say', '-v', 'Sin-Ji', '--quality', '127', $s);
+    @cmd = ('say', @opts, '-v', 'Sin-Ji', '--quality', '127', $s);
   } elsif (macos_p) {
-    @cmd = ('say', '-v', preferred_English_voice, $s);
+    @cmd = ('say', @opts, '-v', preferred_English_voice, $s);
   } else {
     @cmd = ('espeak', $s);
   }
   if (@cmd) {
-    show_cmd @cmd;
-    system { $cmd[0] } @cmd;
+    run_cmd @cmd;
+    if ($broadcast_mode_p) {
+      @cmd = ('esdplay', '-s', $esd_server, $temp_file);
+      run_cmd @cmd;
+    }
   }
 }
 
 sub get_feed_data () {
-  my $data_dir = "$ENV{HOME}/.cache/omni-news";
   my $data_file;
   my $basename = "$prov.html";
   if (defined $test_data_file) {
@@ -236,7 +250,7 @@ sub get_feed_data () {
     my $use_cached_data = 0;
     if (!-f $data_file) {
       print STDERR "DEBUG: need to get new data because nothing was cached\n" if $debug || $verbose;
-    } elsif (time - (stat $data_file)[9] > 7200) {
+    } elsif (time - (stat $data_file)[9] > 86400) { # 24 hours
       print STDERR "DEBUG: need to get new data because cache was stale\n" if $debug || $verbose;
     } elsif ((stat $data_file)[7] == 0) {
       print STDERR "DEBUG: need to get new data because cache file was empty\n" if $debug || $verbose;
@@ -514,6 +528,7 @@ EOF
 Getopt::Long::config('bundling');
 GetOptions(
   'A|all' => sub { $lang = undef },
+  'b|broadcast' => \$broadcast_mode_p,
   'd|debug' => sub { $debug += 1 },
   'province=s' => \$prov,
   'I|data-file=s' => \$test_data_file,
