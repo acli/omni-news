@@ -167,6 +167,11 @@ sub format_channel ($) {
   return $speak_mode_p && defined $channel_pronunciations{$channel}->[$chinese_p]? $channel_pronunciations{$channel}->[$chinese_p]: uc $channel;
 }
 
+sub format_language ($) {
+  my($lang) = @_;
+  return $chinese_p && defined $lang && $langs{$lang}? $langs{$lang}: $lang;
+}
+
 sub macos_p () {
   return -f '/mach_kernel';
 }
@@ -429,14 +434,19 @@ sub display_listing ($$) {
 	$tmp =~ s/午夜|凌晨|上午|中午|下午|晚上//;
 	if (!$something_done_p) {
 	  $lead .= format_date($month, $day, $dow);
-	  $lead .= sprintf('，喺 %s 嘅節目：', format_channel $channel) if $all_same_channel_p;
+	  $lead .= sprintf('，喺 %s ', format_channel $channel) if $all_same_channel_p;
+	  $lead .= '嘅';
+	  $lead .= format_language($lang) if defined $lang;
+	  $lead .= "節目：\n";
 	}
-	$lead .= sprintf('%s至%s', format_time($time), $tmp);
+	$lead .= sprintf('%s%s%s', format_time($time), ($speak_mode_p? '至': '～'), $tmp);
 	$lead .= sprintf('喺 %s 播放', format_channel $channel) unless $all_same_channel_p;
 	$lead .= '：'
       } else {
 	if (!$something_done_p) {
-	  $lead .= sprintf('Schedule for %s', format_date($month, $day, $dow));
+	  $lead .= 'Schedule for ';
+	  $lead .= sprintf('%s programs on ', $lang) if defined $lang;
+	  $lead .= format_date($month, $day, $dow);
 	  $lead .= sprintf(' on %s', format_channel $channel) if $all_same_channel_p;
 	  $lead .= ":\n";
 	}
