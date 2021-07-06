@@ -102,6 +102,14 @@ use vars qw( %chinese_program_name );
   'Focus Cantonese' => '都市聚焦',
 );
 
+sub show_cmd (\@) {
+  my($cmd) = @_;
+  print STDERR 'DEBUG: running: ', join(' ', map { /'/? (/"/? eval {
+	s/"/\\"/;
+	"\"$_\"";
+      }: "\"$_\""): /\s/? "'$_'": $_ } @$cmd), "\n" if $debug || $verbose;
+}
+
 sub format_date ($$$) {
   my($month, $day, $dow) = @_;
   my $fmt = $chinese_p? '%s%s日%s': $speak_mode_p? '%3$s %1$s %2$s': '%3$s, %1$s %2$s';
@@ -163,7 +171,7 @@ sub preferred_English_voice () {
   if (!defined $preferred_English_voice) {
     my %voices;
     my @cmd = ('say', '-v', '?');
-    print STDERR 'DEBUG: running: ', join(' ', @cmd), "\n" if $debug || $verbose;
+    show_cmd @cmd;
 
     my $h = open(INPUT, '-|');
     die "$0: $cmd[0]: fork: $!\n" unless defined $h;
@@ -199,7 +207,7 @@ sub communicate ($) {
     @cmd = ('espeak', $s);
   }
   if (@cmd) {
-    print STDERR 'DEBUG: running: ', join(' ', @cmd), "\n" if $debug || $verbose;
+    show_cmd @cmd;
     system { $cmd[0] } @cmd;
   }
 }
@@ -229,7 +237,7 @@ sub get_feed_data () {
     }
     if (!$use_cached_data) {
       my @cmd = ('wget', '-q', '-O', $data_file, "https://www.omnitv.ca/$prov/yue-can/schedule/");
-      print STDERR 'DEBUG: running: ', join(' ', @cmd), "\n" if $debug || $verbose;
+      show_cmd @cmd;
       my $pid = fork;
       die "$0: get_feed_data: $cmd[0]: fork: $!\n" unless defined $pid;
       if (!$pid) {
