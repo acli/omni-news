@@ -54,13 +54,81 @@ sub STATE__SHOW_NAME () { 'SHOW_NAME' }
 sub STATE__LIMINAL   () { 'LIMINAL' }
 sub STATE__FOOTER    () { 'FOOTER' }
 
+use vars qw( %months %dows );
+%months = (
+  'Jan' => ['January', '一月'],
+  'Feb' => ['February', '二月'],
+  'Mar' => ['March', '三月'],
+  'Apr' => ['April', '四月'],
+  'May' => ['May', '五月'],
+  'Jun' => ['June', '六月'],
+  'Jul' => ['July', '七月'],
+  'Aug' => ['August', '八月'],
+  'Sep' => ['September', '九月'],
+  'Oct' => ['October', '十月'],
+  'Nov' => ['Novermber', '十一月'],
+  'Dec' => ['December', '十二月'],
+);
+%dows = (
+  'Mon' => ['Monday', '星期一'],
+  'Tue' => ['Tuesday', '星期二'],
+  'Wed' => ['Wednesday', '星期三'],
+  'Thu' => ['Thursday', '星期四'],
+  'Fri' => ['Friday', '星期五'],
+  'Sat' => ['Saturday', '星期六'],
+  'Sun' => ['Sunday', '星期日'],
+);
+
+use vars qw( %chinese_program_name );
+%chinese_program_name = (
+  'OMNI News: Cantonese Edition' => '粵語新聞',
+  'Focus Cantonese' => '都市聚焦',
+);
+
+sub format_date ($$$) {
+  my($month, $day, $dow) = @_;
+  my $fmt = $chinese_p? '%s%s日%s': $speak_mode_p? '%3$s %1$s %2$s': '%3$s, %1$s %2$s';
+  return sprintf $fmt, $months{$month}->[$chinese_p], $day, $dows{$dow}->[$chinese_p];
+}
+
+sub format_time ($) {
+  my($time) = @_;
+  my($hour, $minute) = $time =~ /^(\d\d):(\d\d)$/? ($1 + 0, $2 + 0): $time =~ /^(\d+)$/? ($time/60, $time%60): undef;
+  my $it;
+  if ($chinese_p) {
+    my $h = ($hour + 11)%12 + 1;
+    my $m = $minute;
+    if ($speak_mode_p) {
+      $h = '二' if $h == 2;
+      if ($m == 2) {
+	$m = '零二';
+      } elsif ($m && $m < 10) {
+	$m = "零$m";
+      }
+    }
+    $it = sprintf('%s%s時', ($hour == 0? '午夜': $hour < 6? '凌晨': $hour < 12? '上午': $hour == 12? '中午': $hour < 20? '下午': '晚上'), $h);
+    if ($minute == 30) {
+      $it .= '半';
+    } elsif ($minute) {
+      $it .= sprintf('%s分', $m);
+    }
+  } else {
+    my $fmt1 = $speak_mode_p? '[[nmbr NORM]] %s ': '%s:';
+    my $fmt2 = $speak_mode_p? '[[nmbr NORM]] %s ': '%s ';
+    $it = sprintf($fmt1, ($hour + 11)%12 + 1);
+    $it .= sprintf($fmt2, $minute) if !$speak_mode_p || $minute;
+    $it .= ($hour == 0? 'midnight': $hour < 12? 'a.m.': $hour == 12? 'noon': 'p.m.');
+  }
+  return $it;
+}
+
 sub format_duration ($) {
   my($minutes) = @_;
   my $hours = $minutes/60;
   my $it;
   $minutes %= 60;
-  $it .= sprintf('%s %s', $hours, ($hours == 1? 'hour': 'hours')) if $hours;
-  $it .= sprintf('%s %s', $minutes, ($minutes == 1? 'minute': 'minutes')) if $minutes;
+  $it .= sprintf(($chinese_p? '%s 小時': '%s %s'), $hours, ($hours == 1? 'hour': 'hours')) if $hours;
+  $it .= sprintf(($chinese_p? '%s 分鐘': '%s %s'), $minutes, ($minutes == 1? 'minute': 'minutes')) if $minutes;
   return $it;
 }
 
@@ -249,25 +317,81 @@ sub display_listing ($$) {
   my($data, $t) = @_;
   my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($t);
   my $target_time = 60*$hour + $min if $next_mode_p;
-  my $fmt = '%s (%s)';
   my $something_done_p;
+  my $all_same_channel_p;
+  my @data_to_display;
   for my $node (@$data) {
     my($time, $channel, $dow, $day, $month, $name, $duration) = @$node;
     my $broadcast_time = 60*$1 + $2 if $time =~ /^(\d\d):(\d\d)$/;
-    my $lead;
+    my $flag;
     if (!defined $target_time) {
-      $lead = sprintf('%s on %s: ', $time, $channel);
-      $lead = sprintf('Schedule for %s, %s %d: %s', $dow, $month, $day, $lead) if !$something_done_p;
+      $flag = 1;
     } elsif ($broadcast_time > $target_time) {
-      $lead = sprintf 'Next on %s: ', $channel;
+      $flag = 2;
     } elsif ($broadcast_time < $target_time && ($broadcast_time + $duration) > $target_time) {
-      $lead = 'Currently on %s: ', $channel;
+      $flag = 3;
     }
-    if (defined $lead) {
-      communicate $lead . sprintf $fmt, $name, format_duration $duration;
+    if (defined $flag) {
+      push @data_to_display, [$flag, $broadcast_time, $broadcast_time + $duration, $time, $channel, $dow, $day, $month, $name, $duration];
+      if (!defined $all_same_channel_p) {
+	$all_same_channel_p = $channel;
+      } elsif ($all_same_channel_p && $all_same_channel_p ne $channel) {
+	$all_same_channel_p = 0;
+      }
       $something_done_p = 1;
     }
   last if $something_done_p && defined $target_time;
+  }
+  $something_done_p = 0;
+  for my $node (@data_to_display) {
+    my($flag, $start_time, $end_time, $time, $channel, $dow, $day, $month, $name, $duration) = @$node;
+    my $lead;
+    my $comment;
+    if ($flag == 1) {
+      if ($chinese_p) {
+	my $tmp = format_time($end_time);
+	$tmp =~ s/午夜|凌晨|上午|中午|下午|晚上//;
+	if (!$something_done_p) {
+	  $lead .= format_date($month, $day, $dow);
+	  $lead .= "，喺 $channel 嘅節目：" if $all_same_channel_p;
+	}
+	$lead .= sprintf('%s至%s', format_time($time), $tmp);
+	$lead .= "喺 $channel 播放" unless $all_same_channel_p;
+	$lead .= '：'
+      } else {
+	if (!$something_done_p) {
+	  $lead .= sprintf('Schedule for %s', format_date($month, $day, $dow));
+	  $lead .= sprintf(' on %s', $channel) if $all_same_channel_p;
+	  $lead .= ":\n";
+	}
+	$lead .= format_time($time);
+	$lead .= " on $channel" unless $all_same_channel_p;
+	$lead .= ': ';
+	$comment = sprintf(' (%s)', format_duration $duration);
+      }
+    } elsif ($flag == 2) {
+      if ($chinese_p) {
+	$lead .= "$channel " unless $all_same_channel_p;
+	$lead .= sprintf('下一個節目係，%s播放，%s嘅，', format_time($time), format_duration($duration));
+      } else {
+	$lead .= sprintf('Next at %s', format_time $time);
+	$lead .= " on $channel" unless $all_same_channel_p;
+	$lead .= ': ';
+      }
+    } elsif ($flag == 3) {
+      if ($chinese_p) {
+	$lead .= "$channel " unless $all_same_channel_p;
+	$lead .= '現正播放嘅節目係：';
+	$comment = sprintf('，直至%s', format_time($end_time));
+      } else {
+	$lead = 'Currently on ';
+	$lead .= "$channel " unless $all_same_channel_p;
+	$lead .= sprintf('until %s: ', format_time($end_time));
+      }
+    }
+    $name = $chinese_program_name{$name} if $chinese_p && defined $chinese_program_name{$name};
+    communicate $lead . $name . $comment;
+    $something_done_p = 1;
   }
 }
 
