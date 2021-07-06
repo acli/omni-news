@@ -12,7 +12,7 @@
 # see https://stackoverflow.com/questions/6162484/why-does-modern-perl-avoid-utf-8-by-default for these crazy hacks
 # THERE ARE MORE CRAZY HACKS THERE FOR MORE COMPLEX PROJECTS!!
 use v5.12; # minimal for unicode string feature
-use v5.14; # //u modifier
+#use v5.14; # //u modifier
 use utf8;
 use open qw( :encoding(UTF-8) :std );
 use charnames qw( :full :short );
@@ -32,10 +32,11 @@ use Getopt::Long;
 
 use vars qw( $sysline_mode $genmon_mode );
 use vars qw( $debug $test_data_file );
+use vars qw( $verbose );
 use vars qw( $lang );
-use vars qw( $representation );
 use vars qw( $prov );
 use vars qw( $now );
+use vars qw( $next_mode_p );
 $lang = 'Cantonese';
 $prov = 'on';
 
@@ -67,7 +68,7 @@ sub get_feed_data () {
   my $basename = "$prov.html";
   if (defined $test_data_file) {
     $data_file = $test_data_file;
-    print STDERR "DEBUG: using test data from \"$data_file\"\n" if $debug;
+    print STDERR "DEBUG: using test data from \"$data_file\"\n" if $debug || $verbose;
   } else {
     if (!-d $data_dir) {
       mkdir $data_dir or warn "$0: $data_dir: $!\n";
@@ -75,16 +76,16 @@ sub get_feed_data () {
     $data_file = "$data_dir/$basename";
     my $use_cached_data = 0;
     if (!-f $data_file) {
-      print STDERR "DEBUG: need to get new data because nothing was cached\n" if $debug;
+      print STDERR "DEBUG: need to get new data because nothing was cached\n" if $debug || $verbose;
     } elsif (time - (stat $data_file)[9] > 7200) {
-      print STDERR "DEBUG: need to get new data because cache was stale\n" if $debug;
+      print STDERR "DEBUG: need to get new data because cache was stale\n" if $debug || $verbose;
     } else {
-      print STDERR "DEBUG: using cached data\n" if $debug;
+      print STDERR "DEBUG: using cached data\n" if $debug || $verbose;
       $use_cached_data = 1;
     }
     if (!$use_cached_data) {
       my @cmd = ('wget', '-q', '-O', $data_file, "https://www.omnitv.ca/$prov/yue-can/schedule/");
-      print STDERR 'DEBUG: running: ', join(' ', @cmd), "\n" if $debug;
+      print STDERR 'DEBUG: running: ', join(' ', @cmd), "\n" if $debug || $verbose;
       my $pid = fork;
       die "$0: get_feed_data: $cmd[0]: fork: $!\n" unless defined $pid;
       if (!$pid) {
@@ -220,11 +221,16 @@ sub find_language_program ($$) {
   return [sort { $a->[0] cmp $b->[0] } @found];
 }
 
-sub display_listing ($) {
-  my($data) = @_;
+sub display_listing ($$) {
+  my($data, $t) = @_;
+  my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($t);
+  my $target_time = sprintf('%02d:%02d', $hour, $min) if $next_mode_p;
   for my $node (@$data) {
     my($time, $channel, $dow, $day, $month, $name, $duration) = @$node;
-    printf "%s %d (%s) %s on %s: %s (%s)\n", $month, $day, $dow, $time, $channel, $name, format_duration $duration;
+    if (!defined $target_time || $time >= $target_time) {
+      printf "%s %d (%s) %s on %s: %s (%s)\n", $month, $day, $dow, $time, $channel, $name, format_duration $duration;
+  last if defined $target_time;
+    }
   }
 }
 
@@ -235,11 +241,14 @@ sub usage (;$) {
 Usage: $0 [OPTION]...
 Figure out when OMNI News Cantonese is being aired by checking the scheduile.
 
-      --province=CODE         Use the province identified by the specified CODE
+  -a, --all                   Match all programs instead of a specific language
   -I, --data-file=FILE        Use test feed data in specified FILE
   -g, --genmon                Terse format suitable as two-line genmon input
-      --iconic                Use zodiac symbols (DO NOT USE)
+  -n, --next                  Display next match instead of all matches
+      --province=CODE         Use the province identified by the specified CODE
   -w, --sysline               Terse format suitable as a sysline .who file
+  -W, --what-if=TIMESTAMP     Pretend current time is TIMESTAMP (Unix epoch)
+  -v, --verbose               Explain what is being done
       --debug                 Produce lots of debugging output
 
 The codes bc and on are known to exist, but it's not known if they air different
@@ -255,10 +264,10 @@ GetOptions(
   'province=s' => \$prov,
   'I|data-file=s' => \$test_data_file,
   'g|genmon' => \$genmon_mode,
+  'n|next' => \$next_mode_p,
   'w|sysline' => \$sysline_mode,
-  'iconic' => sub { $representation = 'icon' },
-  'symbolic' => sub { $representation = 'name' },
   'W|what-if=i' => \$now,
+  'v|verbose' => \$verbose,
   'help' => \&usage,
 ) || usage(1);
 
@@ -273,5 +282,5 @@ my $data = get_feed_data;
 print STDERR 'DEBUG: parsed data is ' . Dumper $data if $debug;
 
 my $listing = find_language_program $data, $now;
-display_listing $listing;
+display_listing $listing, $now;
 
