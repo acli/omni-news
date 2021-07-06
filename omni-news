@@ -90,6 +90,12 @@ use vars qw( %months %dows );
   'Sun' => ['Sunday', '星期日'],
 );
 
+use vars qw( %channel_pronunciations );
+%channel_pronunciations = (
+  'omni1' => ['Omni One', 'Om Ni One'],
+  'omni2' => ['Omni Two', 'Om Ni Two'],
+);
+
 use vars qw( %chinese_program_name );
 %chinese_program_name = (
   'OMNI News: Cantonese Edition' => '粵語新聞',
@@ -110,14 +116,15 @@ sub format_time ($) {
     my $h = ($hour + 11)%12 + 1;
     my $m = $minute;
     if ($speak_mode_p) {
-      $h = '二' if $h == 2;
+      $h = ($speak_mode_p? '兩': '二') if $h == 2;
       if ($m == 2) {
 	$m = '零二';
       } elsif ($m && $m < 10) {
 	$m = "零$m";
       }
     }
-    $it = sprintf('%s%s時', ($hour == 0? '午夜': $hour < 6? '凌晨': $hour < 12? '上午': $hour == 12? '中午': $hour < 20? '下午': '晚上'), $h);
+    my $fmt = $speak_mode_p? '%s%s點': '%s%s時';
+    $it = sprintf($fmt, ($hour == 0? '午夜': $hour < 6? '凌晨': $hour < 12? '上午': $hour == 12? '中午': $hour < 20? '下午': '晚上'), $h);
     if ($minute == 30) {
       $it .= '半';
     } elsif ($minute) {
@@ -141,6 +148,11 @@ sub format_duration ($) {
   $it .= sprintf(($chinese_p? '%s 小時': '%s %s'), $hours, ($hours == 1? 'hour': 'hours')) if $hours;
   $it .= sprintf(($chinese_p? '%s 分鐘': '%s %s'), $minutes, ($minutes == 1? 'minute': 'minutes')) if $minutes;
   return $it;
+}
+
+sub format_channel ($) {
+  my($channel) = @_;
+  return $speak_mode_p && defined $channel_pronunciations{$channel}->[$chinese_p]? $channel_pronunciations{$channel}->[$chinese_p]: uc $channel;
 }
 
 sub macos_p () {
@@ -343,7 +355,7 @@ sub find_language_program ($$) {
 	  for my $time (keys %$day_data) {
 	    my $time_data = $day_data->{$time};
 	    if (ref $time_data && (!defined $lang || $time_data->{'name'} =~ /$lang/)) {
-	      push @found, [$time, uc $channel, ucfirst lc $data->{$day}->{'dow'}, $day, $data->{$day}->{'month'}, $time_data->{'name'}, $time_data->{'duration'}];
+	      push @found, [$time, $channel, ucfirst lc $data->{$day}->{'dow'}, $day, $data->{$day}->{'month'}, $time_data->{'name'}, $time_data->{'duration'}];
 	    }
 	  }
 	}
@@ -357,6 +369,8 @@ sub display_listing ($$) {
   my($data, $t) = @_;
   my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($t);
   my $target_time = 60*$hour + $min if $next_mode_p;
+
+  # stage 1 - figure out what exactly to display
   my $something_done_p;
   my $all_same_channel_p;
   my @data_to_display;
@@ -382,6 +396,9 @@ sub display_listing ($$) {
     }
   last if $something_done_p && defined $target_time;
   }
+
+  # stage 2 - actually display the listing
+  my %annotated;
   $something_done_p = 0;
   for my $node (@data_to_display) {
     my($flag, $start_time, $end_time, $time, $channel, $dow, $day, $month, $name, $duration) = @$node;
@@ -393,39 +410,42 @@ sub display_listing ($$) {
 	$tmp =~ s/午夜|凌晨|上午|中午|下午|晚上//;
 	if (!$something_done_p) {
 	  $lead .= format_date($month, $day, $dow);
-	  $lead .= "，喺 $channel 嘅節目：" if $all_same_channel_p;
+	  $lead .= sprintf('，喺 %s 嘅節目：', format_channel $channel) if $all_same_channel_p;
 	}
 	$lead .= sprintf('%s至%s', format_time($time), $tmp);
-	$lead .= "喺 $channel 播放" unless $all_same_channel_p;
+	$lead .= sprintf('喺 %s 播放', format_channel $channel) unless $all_same_channel_p;
 	$lead .= '：'
       } else {
 	if (!$something_done_p) {
 	  $lead .= sprintf('Schedule for %s', format_date($month, $day, $dow));
-	  $lead .= sprintf(' on %s', $channel) if $all_same_channel_p;
+	  $lead .= sprintf(' on %s', format_channel $channel) if $all_same_channel_p;
 	  $lead .= ":\n";
 	}
 	$lead .= format_time($time);
-	$lead .= " on $channel" unless $all_same_channel_p;
+	$lead .= sprintf(' on %s', format_channel $channel) unless $all_same_channel_p;
 	$lead .= ': ';
-	$comment = sprintf(' (%s)', format_duration $duration);
+	$comment = sprintf(' (%s)', format_duration $duration) unless defined $annotated{$name} && $annotated{$name} == $duration;
+	$annotated{$name} = $duration;
       }
     } elsif ($flag == 2) {
       if ($chinese_p) {
-	$lead .= "$channel " unless $all_same_channel_p;
-	$lead .= sprintf('下一個節目係，%s播放，%s嘅，', format_time($time), format_duration($duration));
+	$lead .= sprintf('%s ', format_channel $channel) unless $all_same_channel_p;
+	$lead .= sprintf('下一個節目係，%s播放，', format_time($time));
+	$lead .= sprintf('%s嘅，', format_duration($duration)) unless defined $annotated{$name} && $annotated{$name} == $duration;
+	$annotated{$name} = $duration;
       } else {
 	$lead .= sprintf('Next at %s', format_time $time);
-	$lead .= " on $channel" unless $all_same_channel_p;
+	$lead .= sprintf(' on %s', format_channel $channel) unless $all_same_channel_p;
 	$lead .= ': ';
       }
     } elsif ($flag == 3) {
       if ($chinese_p) {
-	$lead .= "$channel " unless $all_same_channel_p;
+	$lead .= sprintf('%s ', format_channel $channel) unless $all_same_channel_p;
 	$lead .= '現正播放嘅節目係：';
 	$comment = sprintf('，直至%s', format_time($end_time));
       } else {
 	$lead = 'Currently on ';
-	$lead .= "$channel " unless $all_same_channel_p;
+	$lead .= sprintf('%s ', format_channel $channel) unless $all_same_channel_p;
 	$lead .= sprintf('until %s: ', format_time($end_time));
       }
     }
