@@ -124,11 +124,11 @@ sub format_time ($) {
       $it .= sprintf('%s分', $m);
     }
   } else {
-    my $fmt1 = $speak_mode_p? '[[nmbr NORM]] %s ': '%s:';
-    my $fmt2 = $speak_mode_p? '[[nmbr NORM]] %s ': '%02d ';
+    my($fmt1, $fmt2) = $speak_mode_p? ('[[nmbr NORM]] %s ', '[[nmbr NORM]] %s '): ('%2d:', '%02d');
+    my($am, $pm, $noon, $midnight) = $speak_mode_p? ('a.m.', 'p.m.', 'noon', 'midnight'): ('am', 'pm', 'pm', 'am');
     $it = sprintf($fmt1, ($hour + 11)%12 + 1);
     $it .= sprintf($fmt2, $minute) if !$speak_mode_p || $minute;
-    $it .= ($hour == 0? 'midnight': $hour < 12? 'a.m.': $hour == 12? 'noon': 'p.m.');
+    $it .= ($hour == 0? $midnight: $hour < 12? $am: $hour == 12? $noon: $pm);
   }
   return $it;
 }
@@ -209,6 +209,8 @@ sub get_feed_data () {
       print STDERR "DEBUG: need to get new data because nothing was cached\n" if $debug || $verbose;
     } elsif (time - (stat $data_file)[9] > 7200) {
       print STDERR "DEBUG: need to get new data because cache was stale\n" if $debug || $verbose;
+    } elsif ((stat $data_file)[7] == 0) {
+      print STDERR "DEBUG: need to get new data because cache file was empty\n" if $debug || $verbose;
     } else {
       print STDERR "DEBUG: using cached data\n" if $debug || $verbose;
       $use_cached_data = 1;
