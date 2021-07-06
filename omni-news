@@ -35,7 +35,8 @@ use vars qw( $debug $test_data_file );
 use vars qw( $lang );
 use vars qw( $representation );
 use vars qw( $prov );
-$lang = 'yue';
+use vars qw( $now );
+$lang = 'Cantonese';
 $prov = 'on';
 
 
@@ -50,9 +51,14 @@ sub STATE__SHOW_NAME () { 'SHOW_NAME' }
 sub STATE__LIMINAL   () { 'LIMINAL' }
 sub STATE__FOOTER    () { 'FOOTER' }
 
-sub remove_cdata ($) {
-  my($s) = @_;
-  return $s =~ /^<!\[CDATA\[((?:(?!\]\]>).)*)\]\]>/s? $1: $s;
+sub format_duration ($) {
+  my($minutes) = @_;
+  my $hours = $minutes/60;
+  my $it;
+  $minutes %= 60;
+  $it .= sprintf('%s %s', $hours, ($hours == 1? 'hour': 'hours')) if $hours;
+  $it .= sprintf('%s %s', $minutes, ($minutes == 1? 'minute': 'minutes')) if $minutes;
+  return $it;
 }
 
 sub get_feed_data () {
@@ -128,6 +134,7 @@ sub get_feed_data () {
       } elsif ($s =~ /^\s*<span class="date">(\w+) (\d+)<\/span>\s*$/) {
 	die sprintf("%s: Expecting day %s but got %s\n", $s, $regs->{'current-day'}, $2) unless $2 == $regs->{'current-day'};
 	$it->{$regs->{'current-day'}}->{'month'} = $1;
+	$it->{$regs->{'current-day'}}->{'dow'} = $regs->{$regs->{'current-day'}}->{'dow'};
       } elsif ($s =~ /^\s*<span.*?data-date="day-(\d+)".*?>\s*$/) {
 	$regs->{'current-day'} = $1 + 0;
       } elsif ($s =~ /^\s*<div class="time-row">\s*$/) {
@@ -164,7 +171,7 @@ sub get_feed_data () {
       } elsif ($s =~ /^\s*<footer.*?>\s*$/) {
 	push @{$it->{'data'}}, $node;
 	$state = STATE__FOOTER;
-      } elsif ($s =~ /^\s*<span class="more">\s*$/) { # this should happen only if state eq STATE__SHOW_NAME
+      } elsif ($s =~ /^\s*<span class="(?:ratings|more)">\s*$/) { # this should happen only if state eq STATE__SHOW_NAME
 	$state = STATE__SCHEDULE;
       } elsif ($state eq STATE__SHOW_NAME) {
 	$s =~ s/<[^<>]*>//sg;
@@ -186,8 +193,39 @@ sub get_feed_data () {
   return $it;
 }
 
-sub display_weather_data ($) {
+sub find_language_program ($$) {
+  my($data, $t) = @_;
+  my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($t);
+  my $target_day = $mday;
+  my $target_month = POSIX::strftime('%b', $sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst);
+  my $target_dow = uc POSIX::strftime('%a', $sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst);
+  my @found;
+  print STDERR "DEBUG: target day $target_day, month $target_month, dow $target_dow\n" if $debug;
+  for my $channel (keys %$data) {
+    my $channel_data = $data->{$channel};
+    if (ref $channel_data) {
+      for my $day (keys %$channel_data) {
+	my $day_data = $channel_data->{$day};
+	if ($day == $target_day && ref $day_data) {
+	  for my $time (keys %$day_data) {
+	    my $time_data = $day_data->{$time};
+	    if (ref $time_data && (!defined $lang || $time_data->{'name'} =~ /$lang/)) {
+	      push @found, [$time, uc $channel, ucfirst lc $data->{$day}->{'dow'}, $day, $data->{$day}->{'month'}, $time_data->{'name'}, $time_data->{'duration'}];
+	    }
+	  }
+	}
+      }
+    }
+  }
+  return [sort { $a->[0] cmp $b->[0] } @found];
+}
+
+sub display_listing ($) {
   my($data) = @_;
+  for my $node (@$data) {
+    my($time, $channel, $dow, $day, $month, $name, $duration) = @$node;
+    printf "%s %d (%s) %s on %s: %s (%s)\n", $month, $day, $dow, $time, $channel, $name, format_duration $duration;
+  }
 }
 
 sub usage (;$) {
@@ -212,6 +250,7 @@ EOF
 
 Getopt::Long::config('bundling');
 GetOptions(
+  'a|all' => sub { $lang = undef },
   'd|debug' => sub { $debug += 1 },
   'province=s' => \$prov,
   'I|data-file=s' => \$test_data_file,
@@ -219,10 +258,12 @@ GetOptions(
   'w|sysline' => \$sysline_mode,
   'iconic' => sub { $representation = 'icon' },
   'symbolic' => sub { $representation = 'name' },
+  'W|what-if=i' => \$now,
   'help' => \&usage,
 ) || usage(1);
 
 die "$0: \"$prov\" does not look like a valid city code\n" unless $prov =~ /^[a-z]{2}$/;
+$now = time unless defined $now;
 
 binmode STDIN, ':utf8';
 binmode STDOUT, ':utf8';
@@ -231,5 +272,6 @@ binmode STDERR, ':utf8';
 my $data = get_feed_data;
 print STDERR 'DEBUG: parsed data is ' . Dumper $data if $debug;
 
-display_weather_data $data;
+my $listing = find_language_program $data, $now;
+display_listing $listing;
 
