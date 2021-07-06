@@ -55,6 +55,16 @@ sub STATE__SHOW_NAME () { 'SHOW_NAME' }
 sub STATE__LIMINAL   () { 'LIMINAL' }
 sub STATE__FOOTER    () { 'FOOTER' }
 
+use vars qw( %langs );
+%langs = (
+  'Arabic' => '阿拉伯文',
+  'Cantonese' => '廣東話',
+  'Filipino' => '菲律賓文',
+  'Italian' => '意大利文',
+  'Mandarin' => '國語',
+  'Punjabi' => '旁遮普文',
+);
+
 use vars qw( %months %dows );
 %months = (
   'Jan' => ['January', '一月'],
@@ -115,7 +125,7 @@ sub format_time ($) {
     }
   } else {
     my $fmt1 = $speak_mode_p? '[[nmbr NORM]] %s ': '%s:';
-    my $fmt2 = $speak_mode_p? '[[nmbr NORM]] %s ': '%s ';
+    my $fmt2 = $speak_mode_p? '[[nmbr NORM]] %s ': '%02d ';
     $it = sprintf($fmt1, ($hour + 11)%12 + 1);
     $it .= sprintf($fmt2, $minute) if !$speak_mode_p || $minute;
     $it .= ($hour == 0? 'midnight': $hour < 12? 'a.m.': $hour == 12? 'noon': 'p.m.');
