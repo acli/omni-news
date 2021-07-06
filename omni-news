@@ -39,6 +39,7 @@ use vars qw( $now );
 use vars qw( $chinese_p );
 use vars qw( $next_mode_p );
 use vars qw( $speak_mode_p );
+use vars qw( $preferred_English_voice );
 $lang = 'Cantonese';
 $prov = 'on';
 
@@ -136,6 +137,33 @@ sub macos_p () {
   return -f '/mach_kernel';
 }
 
+sub preferred_English_voice () {
+  if (!defined $preferred_English_voice) {
+    my %voices;
+    my @cmd = ('say', '-v', '?');
+    print STDERR 'DEBUG: running: ', join(' ', @cmd), "\n" if $debug || $verbose;
+
+    my $h = open(INPUT, '-|');
+    die "$0: $cmd[0]: fork: $!\n" unless defined $h;
+    if ($h) {
+      for (;;) {
+	my $s = scalar <INPUT>;
+      last unless defined $s;
+	$voices{$1} = $2 if $s =~ /^(.*?\S)\s+([a-z]{2}[-_](?:[A-Z][A-Z]|[a-z]+))\s+#/s;
+      }
+      close INPUT;
+    } else {
+      exec {$cmd[0]} @cmd;
+      die "$0: $cmd[0]: exec: $!\n";
+    }
+    for my $pref (('Fiona', 'Emily', 'Karen', 'Samantha')) {
+      $preferred_English_voice = $pref if defined $voices{$pref};
+    last if defined $preferred_English_voice;
+    }
+  }
+  return $preferred_English_voice;
+}
+
 sub communicate ($) {
   my($s) = @_;
   my @cmd;
@@ -144,7 +172,7 @@ sub communicate ($) {
   } elsif (macos_p && $chinese_p) {
     @cmd = ('say', '-v', 'Sin-Ji', $s);
   } elsif (macos_p) {
-    @cmd = ('say', '-v', 'Samantha', $s);
+    @cmd = ('say', '-v', preferred_English_voice, $s);
   } else {
     @cmd = ('espeak', $s);
   }
