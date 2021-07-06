@@ -444,9 +444,10 @@ sub display_listing ($$) {
 	$lead .= '現正播放嘅節目係：';
 	$comment = sprintf('，直至%s', format_time($end_time));
       } else {
-	$lead = 'Currently on ';
-	$lead .= sprintf('%s ', format_channel $channel) unless $all_same_channel_p;
-	$lead .= sprintf('until %s: ', format_time($end_time));
+	$lead = 'Currently on';
+	$lead .= sprintf(' %s', format_channel $channel) unless $all_same_channel_p;
+	$lead .= sprintf(', until %s', format_time($end_time));
+	$lead .= ': ';
       }
     }
     $name = $chinese_program_name{$name} if $chinese_p && defined $chinese_program_name{$name};
