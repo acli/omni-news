@@ -103,6 +103,7 @@ use vars qw( %chinese_program_name );
 %chinese_program_name = (
   'OMNI News: Cantonese Edition' => '粵語新聞',
   'Focus Cantonese' => '都市聚焦',
+  'Showers of Blessings' => '恩雨之聲',
 );
 
 sub show_cmd (\@) {
@@ -349,6 +350,13 @@ sub get_feed_data () {
   return $it;
 }
 
+sub match_program_language ($$) {
+  my($name, $language) = @_;
+  my $it = defined $language && $language =~ /\S/ && $name =~ /$language/;
+  $it = 1 if $language eq 'Cantonese' && defined $chinese_program_name{$name};
+  return $it;
+}
+
 sub find_language_program ($$) {
   my($data, $t) = @_;
   my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($t);
@@ -365,7 +373,7 @@ sub find_language_program ($$) {
 	if ($day == $target_day && ref $day_data) {
 	  for my $time (keys %$day_data) {
 	    my $time_data = $day_data->{$time};
-	    if (ref $time_data && (!defined $lang || $time_data->{'name'} =~ /$lang/)) {
+	    if (ref $time_data && (!defined $lang || match_program_language($time_data->{'name'}, $lang))) {
 	      push @found, [$time, $channel, ucfirst lc $data->{$day}->{'dow'}, $day, $data->{$day}->{'month'}, $time_data->{'name'}, $time_data->{'duration'}];
 	    }
 	  }
@@ -465,6 +473,7 @@ sub display_listing ($$) {
     communicate $lead . $name . $comment;
     $something_done_p = 1;
   }
+  print "No results were found.\n" unless @data_to_display;
 }
 
 sub usage (;$) {
