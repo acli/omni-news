@@ -1,0 +1,235 @@
+#!/usr/bin/perl
+# vi:set sw=2 ai sm:
+#
+# Copyright 2021 by Ambrose Li <ambrose.li@gmail.com>
+# Pull program schedule from OMNI TV's site to try to figure out when news is aired
+# because the time can shift around or news for the day can get cancelled for hockey
+#
+# Feed for Toronto is here: https://www.omnitv.ca/on/yue-can/schedule/
+# Province probably makes a difference, but language doesn't because this is just the master schedule
+# The schedule is a mess of spans and b's (not even divs) that's completely unreadable on w3m
+
+# see https://stackoverflow.com/questions/6162484/why-does-modern-perl-avoid-utf-8-by-default for these crazy hacks
+# THERE ARE MORE CRAZY HACKS THERE FOR MORE COMPLEX PROJECTS!!
+use v5.12; # minimal for unicode string feature
+use v5.14; # //u modifier
+use utf8;
+use open qw( :encoding(UTF-8) :std );
+use charnames qw( :full :short );
+use feature "unicode_strings";
+
+use warnings qw( FATAL utf8 );
+use Encode qw( encode decode );
+@ARGV = map { decode("UTF-8", $_) } @ARGV if grep /\P{ASCII}/ => @ARGV;
+
+
+use strict;
+use integer;
+
+use POSIX ":sys_wait_h";
+use Data::Dumper;
+use Getopt::Long;
+
+use vars qw( $sysline_mode $genmon_mode );
+use vars qw( $debug $test_data_file );
+use vars qw( $lang );
+use vars qw( $representation );
+use vars qw( $prov );
+$lang = 'yue';
+$prov = 'on';
+
+
+
+sub STATE__INITIAL   () { 'INITIAL' }
+sub STATE__CHANNEL   () { 'CHANNEL' }
+sub STATE__DAYS      () { 'DAYS' }
+sub STATE__DAY       () { 'DAY' }
+sub STATE__TIMES     () { 'TIMES' }
+sub STATE__SCHEDULE  () { 'SCHEDULE' }
+sub STATE__SHOW_NAME () { 'SHOW_NAME' }
+sub STATE__LIMINAL   () { 'LIMINAL' }
+sub STATE__FOOTER    () { 'FOOTER' }
+
+sub remove_cdata ($) {
+  my($s) = @_;
+  return $s =~ /^<!\[CDATA\[((?:(?!\]\]>).)*)\]\]>/s? $1: $s;
+}
+
+sub get_feed_data () {
+  my $data_dir = "$ENV{HOME}/.cache/omni-news";
+  my $data_file;
+  my $basename = "$prov.html";
+  if (defined $test_data_file) {
+    $data_file = $test_data_file;
+    print STDERR "DEBUG: using test data from \"$data_file\"\n" if $debug;
+  } else {
+    if (!-d $data_dir) {
+      mkdir $data_dir or warn "$0: $data_dir: $!\n";
+    }
+    $data_file = "$data_dir/$basename";
+    my $use_cached_data = 0;
+    if (!-f $data_file) {
+      print STDERR "DEBUG: need to get new data because nothing was cached\n" if $debug;
+    } elsif (time - (stat $data_file)[9] > 7200) {
+      print STDERR "DEBUG: need to get new data because cache was stale\n" if $debug;
+    } else {
+      print STDERR "DEBUG: using cached data\n" if $debug;
+      $use_cached_data = 1;
+    }
+    if (!$use_cached_data) {
+      my @cmd = ('wget', '-q', '-O', $data_file, "https://www.omnitv.ca/$prov/yue-can/schedule/");
+      print STDERR 'DEBUG: running: ', join(' ', @cmd), "\n" if $debug;
+      my $pid = fork;
+      die "$0: get_feed_data: $cmd[0]: fork: $!\n" unless defined $pid;
+      if (!$pid) {
+	exec {$cmd[0]} @cmd;
+	die "$0: get_feed_data: $cmd[0]: exec: $!\n";
+      }
+      wait; # otherwise we'll try to open the file before wget saves it
+    }
+  }
+  open(INPUT, '<:utf8', $data_file) or die "$0: $data_file: $!\n";
+  my $it = {};
+  my $regs = {};
+  my @readahead;
+  for (my $state = STATE__INITIAL, my $i = -1, my $node;;) {
+    my $s = @readahead? pop @readahead: scalar <INPUT>;
+  last unless defined $s;
+    chomp $s;
+    printf STDERR "DEBUG: state %s input (%s)\n", $state, $s if $debug > 2;
+    $s =~ s/\&(?:#xB0|deg);/°/g;
+    $s =~ s/\b([Ii])nt'l\b/\1nternational/g;
+    my $debug__orig_state = $state;
+    if ($state eq STATE__INITIAL || $state eq STATE__LIMINAL) {
+      if ($s =~ /^\s*<div.*data-(channel)="(.*?)">\s*$/) {
+	$regs->{'current-channel'} = $2;
+	$state = STATE__CHANNEL;
+	$node = {};
+	$i += 1;
+      }
+    } elsif ($state eq STATE__CHANNEL) {
+      if ($s =~ /^\s*<div.*data-(channel)="(.*?)">\s*$/) {
+	die "STATE__$state encountered unexpected data-channel div, this is a bug.\n";
+      } elsif ($s =~ /^\s*<div class="day-picker-view">\s*$/) {
+	$state = STATE__DAYS;
+      }
+    } elsif ($state eq STATE__DAYS) {
+      if ($s =~ /^\s*<div.*data-(channel)="(.*?)">\s*$/) {
+	die "STATE__$state encountered unexpected data-channel div, this is a bug.\n";
+      } elsif ($s =~ /^\s*<span.*?data-date="day-(\d+)".*?>\s*$/) {
+	$regs->{'current-day'} = $1 + 0;
+	$state = STATE__DAY;
+      }
+    } elsif ($state eq STATE__DAY) {
+      if ($s =~ /^\s*<div.*data-(channel)="(.*?)">\s*$/) {
+	die "STATE__$state encountered unexpected data-channel div, this is a bug.\n";
+      } elsif ($s =~ /^\s*<span class="day-name\b.*?">(\w+)<\/span>\s*$/) {
+	$regs->{$regs->{'current-day'}}->{'dow'} = $1;
+      } elsif ($s =~ /^\s*<span class="date">(\w+) (\d+)<\/span>\s*$/) {
+	die sprintf("%s: Expecting day %s but got %s\n", $s, $regs->{'current-day'}, $2) unless $2 == $regs->{'current-day'};
+	$it->{$regs->{'current-day'}}->{'month'} = $1;
+      } elsif ($s =~ /^\s*<span.*?data-date="day-(\d+)".*?>\s*$/) {
+	$regs->{'current-day'} = $1 + 0;
+      } elsif ($s =~ /^\s*<div class="time-row">\s*$/) {
+	delete $regs->{'current-day'};
+	$regs->{'times'} = [];
+	$state = STATE__TIMES;
+      }
+    } elsif ($state eq STATE__TIMES) {
+      if ($s =~ /^\s*<div.*data-(channel)="(.*?)">\s*$/) {
+	die "STATE__$state encountered unexpected data-channel div, this is a bug.\n";
+      } elsif ($s =~ /^\s*<span .*?data-timeslot="(\d\d:\d\d)">\s*$/) {
+	$regs->{$1} = @{$regs->{'times'}};
+	push @{$regs->{'times'}}, $1;
+      } elsif ($s =~ /^\s*<div class="schedule-data day(\d+)">\s*$/) {
+	$regs->{'current-day'} = $1 + 0;
+	$state = STATE__SCHEDULE;
+	printf STDERR "DEBUG: %s schedule for day %s\n", $regs->{'current-channel'}, $1 if $debug > 1;
+      }
+    } elsif ($state eq STATE__SCHEDULE || $state eq STATE__SHOW_NAME) {
+      if ($s =~ /^\s*<div.*data-(channel)="(.*?)">\s*$/) {
+	die "STATE__$state encountered unexpected data-channel div, this is a bug.\n";
+      } elsif ($s =~ /^\s*<div class="schedule-data day(\d+)">\s*$/) {
+	push @readahead, $s;
+	$state = STATE__TIMES;
+      } elsif ($s =~ /<span class=".*?duration(\d+).*?" data-timeslot="(\d\d:\d\d)">/) {
+	$regs->{'current-time'} = $2;
+	$node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'duration'} = $1 + 0;
+      } elsif ($s =~ /<span class="show-name">(.+)/) {
+	$state = STATE__SHOW_NAME;
+	push @readahead, $1;
+      } elsif ($s =~ /<!--\s*schedule-view\s*-end\s*-->\s*$/) {
+	$it->{$regs->{'current-channel'}} = $node;
+	$state = STATE__LIMINAL;
+      } elsif ($s =~ /^\s*<footer.*?>\s*$/) {
+	push @{$it->{'data'}}, $node;
+	$state = STATE__FOOTER;
+      } elsif ($s =~ /^\s*<span class="more">\s*$/) { # this should happen only if state eq STATE__SHOW_NAME
+	$state = STATE__SCHEDULE;
+      } elsif ($state eq STATE__SHOW_NAME) {
+	$s =~ s/<[^<>]*>//sg;
+	$s =~ s/^\s+//sg;
+	$s =~ s/\s+$//sg;
+	if ($s =~ /\S/s) {
+	  $node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'name'} .= ' ' if defined $node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'name'};
+	  $node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'name'} .= $s;
+	}
+      }
+    } else {
+      die "$0: Internal error: Reached unknown state \"$state\"\n";
+    }
+    print STDERR "DEBUG: switched state from $debug__orig_state to $state\n" if $debug && $debug__orig_state ne $state;
+  last if $state eq STATE__FOOTER;
+  }
+  print STDERR "DEBUG: end of feed reached\n" if $debug;
+  close INPUT;
+  return $it;
+}
+
+sub display_weather_data ($) {
+  my($data) = @_;
+}
+
+sub usage (;$) {
+  my($st) = @_;
+  my $h = $st? *STDERR: *STDOUT;
+  print $h <<EOF;
+Usage: $0 [OPTION]...
+Figure out when OMNI News Cantonese is being aired by checking the scheduile.
+
+      --province=CODE         Use the province identified by the specified CODE
+  -I, --data-file=FILE        Use test feed data in specified FILE
+  -g, --genmon                Terse format suitable as two-line genmon input
+      --iconic                Use zodiac symbols (DO NOT USE)
+  -w, --sysline               Terse format suitable as a sysline .who file
+      --debug                 Produce lots of debugging output
+
+The codes bc and on are known to exist, but it's not known if they air different
+programs in different provinces.
+EOF
+  exit $st;
+}
+
+Getopt::Long::config('bundling');
+GetOptions(
+  'd|debug' => sub { $debug += 1 },
+  'province=s' => \$prov,
+  'I|data-file=s' => \$test_data_file,
+  'g|genmon' => \$genmon_mode,
+  'w|sysline' => \$sysline_mode,
+  'iconic' => sub { $representation = 'icon' },
+  'symbolic' => sub { $representation = 'name' },
+  'help' => \&usage,
+) || usage(1);
+
+die "$0: \"$prov\" does not look like a valid city code\n" unless $prov =~ /^[a-z]{2}$/;
+
+binmode STDIN, ':utf8';
+binmode STDOUT, ':utf8';
+binmode STDERR, ':utf8';
+
+my $data = get_feed_data;
+print STDERR 'DEBUG: parsed data is ' . Dumper $data if $debug;
+
+display_weather_data $data;
+
