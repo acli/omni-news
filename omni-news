@@ -36,7 +36,9 @@ use vars qw( $verbose );
 use vars qw( $lang );
 use vars qw( $prov );
 use vars qw( $now );
+use vars qw( $chinese_p );
 use vars qw( $next_mode_p );
+use vars qw( $speak_mode_p );
 $lang = 'Cantonese';
 $prov = 'on';
 
@@ -60,6 +62,28 @@ sub format_duration ($) {
   $it .= sprintf('%s %s', $hours, ($hours == 1? 'hour': 'hours')) if $hours;
   $it .= sprintf('%s %s', $minutes, ($minutes == 1? 'minute': 'minutes')) if $minutes;
   return $it;
+}
+
+sub macos_p () {
+  return -f '/mach_kernel';
+}
+
+sub communicate ($) {
+  my($s) = @_;
+  my @cmd;
+  if (!$speak_mode_p) {
+    printf "%s\n", $s;
+  } elsif (macos_p && $chinese_p) {
+    @cmd = ('say', '-v', 'Sin-Ji', $s);
+  } elsif (macos_p) {
+    @cmd = ('say', '-v', 'Samantha', $s);
+  } else {
+    @cmd = ('espeak', $s);
+  }
+  if (@cmd) {
+    print STDERR 'DEBUG: running: ', join(' ', @cmd), "\n" if $debug || $verbose;
+    system { $cmd[0] } @cmd;
+  }
 }
 
 sub get_feed_data () {
@@ -224,13 +248,26 @@ sub find_language_program ($$) {
 sub display_listing ($$) {
   my($data, $t) = @_;
   my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($t);
-  my $target_time = sprintf('%02d:%02d', $hour, $min) if $next_mode_p;
+  my $target_time = 60*$hour + $min if $next_mode_p;
+  my $fmt = '%s (%s)';
+  my $something_done_p;
   for my $node (@$data) {
     my($time, $channel, $dow, $day, $month, $name, $duration) = @$node;
-    if (!defined $target_time || $time >= $target_time) {
-      printf "%s %d (%s) %s on %s: %s (%s)\n", $month, $day, $dow, $time, $channel, $name, format_duration $duration;
-  last if defined $target_time;
+    my $broadcast_time = 60*$1 + $2 if $time =~ /^(\d\d):(\d\d)$/;
+    my $lead;
+    if (!defined $target_time) {
+      $lead = sprintf('%s on %s: ', $time, $channel);
+      $lead = sprintf('Schedule for %s, %s %d: %s', $dow, $month, $day, $lead) if !$something_done_p;
+    } elsif ($broadcast_time > $target_time) {
+      $lead = sprintf 'Next on %s: ', $channel;
+    } elsif ($broadcast_time < $target_time && ($broadcast_time + $duration) > $target_time) {
+      $lead = 'Currently on %s: ', $channel;
     }
+    if (defined $lead) {
+      communicate $lead . sprintf $fmt, $name, format_duration $duration;
+      $something_done_p = 1;
+    }
+  last if $something_done_p && defined $target_time;
   }
 }
 
@@ -246,9 +283,11 @@ Figure out when OMNI News Cantonese is being aired by checking the scheduile.
   -g, --genmon                Terse format suitable as two-line genmon input
   -n, --next                  Display next match instead of all matches
       --province=CODE         Use the province identified by the specified CODE
+      --speak                 Speak the result instead of displaying it
   -w, --sysline               Terse format suitable as a sysline .who file
   -W, --what-if=TIMESTAMP     Pretend current time is TIMESTAMP (Unix epoch)
   -v, --verbose               Explain what is being done
+  -z, --chinese               Display results in Chinese
       --debug                 Produce lots of debugging output
 
 The codes bc and on are known to exist, but it's not known if they air different
@@ -265,9 +304,11 @@ GetOptions(
   'I|data-file=s' => \$test_data_file,
   'g|genmon' => \$genmon_mode,
   'n|next' => \$next_mode_p,
+  'speak' => \$speak_mode_p,
   'w|sysline' => \$sysline_mode,
   'W|what-if=i' => \$now,
   'v|verbose' => \$verbose,
+  'z|zh|chinese' => \$chinese_p,
   'help' => \&usage,
 ) || usage(1);
 
