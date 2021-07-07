@@ -282,7 +282,7 @@ sub communicate ($) {
   if (!$speak_mode_p) {
     printf "%s\n", $s;
   } elsif (macos_p && $chinese_p) {
-    @cmd = ('say', @opts, '-v', 'Sin-Ji', '--quality', '127', $s);
+    @cmd = ('say', @opts, '-v', 'Sin-Ji', $s);
   } elsif (macos_p) {
     @cmd = ('say', @opts, '-v', preferred_English_voice, $s);
   } else {
