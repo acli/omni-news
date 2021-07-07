@@ -150,6 +150,10 @@ sub log_input ($) {
   return log_something $_[0], '<';
 }
 
+sub log_output ($) {
+  return log_something $_[0], '>';
+}
+
 sub show_cmd (\@) {
   my($cmd) = @_;
   log_debug sprintf 'running: %s', join(' ', map { /'/? (/"/? eval {
@@ -572,7 +576,7 @@ sub enter_infinite_loop () {
   my $expiry_delta = 60;
   log_debug 'OMNI TV Cantonese News monitoring loop started' if $debug || $verbose;
   for (my($data, $next_program, $start_time, $end_time, $name, $announced, $expiry);;) {
-    my $now = time;
+    $now = time;
     my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime $now;
     my $midnight_today = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
     my($reporting_origin, $reporting_delta) = ($midnight_today, $now - $midnight_today);
@@ -605,7 +609,6 @@ sub enter_infinite_loop () {
 	  $expiry = $end_time - $expiry_delta;
 	} else {
 	  log_debug "resetting expiry" if $debug || $verbose;
-	  undef $announced;
 	  undef $expiry;
 	}
       }
@@ -613,7 +616,7 @@ sub enter_infinite_loop () {
     my $dt = $start_time - $now;
     my $sleep_time;
     log_debug sprintf "delta to next program = %d (start time %d '%s')", $start_time - $now, $start_time, POSIX::strftime('%F %T', localtime $start_time) if $debug;
-    if ($dt <= $announcement_delta && !defined $announced) {
+    if ($dt <= $announcement_delta && (!defined $announced || $announced < $start_time - $announcement_delta)) {
       my $night_p = POSIX::strftime('%H', localtime $now) =~ /^0[0-7]$/;
       if ($quiet_p && $night_p && $speak_mode_p) {
 	log_debug "an announcement would have been made but it's night and we're in quiet mode" if $debug || $verbose;
