@@ -134,12 +134,28 @@ use vars qw( %chinese_program_name );
   'Showers of Blessings' => '恩雨之聲',
 );
 
+sub log_something ($$) {
+  my($msg, $flag) = @_;
+  chomp $msg;
+  for my $s (split(/\n/, $msg)) {
+    printf STDERR "%d%s\t%s\n", time, $flag, $s;
+  }
+}
+
+sub log_debug ($) {
+  return log_something $_[0], '#';
+}
+
+sub log_input ($) {
+  return log_something $_[0], '<';
+}
+
 sub show_cmd (\@) {
   my($cmd) = @_;
-  print STDERR 'DEBUG: running: ', join(' ', map { /'/? (/"/? eval {
+  log_debug sprintf 'running: %s', join(' ', map { /'/? (/"/? eval {
 	s/"/\\"/;
 	"\"$_\"";
-      }: "\"$_\""): /\s/? "'$_'": $_ } @$cmd), "\n" if $debug || $verbose;
+      }: "\"$_\""): /\s/? "'$_'": $_ } @$cmd) if $debug || $verbose;
 }
 
 sub run_cmd (\@) {
@@ -277,7 +293,7 @@ sub get_feed_data () {
   my $basename = "$prov.html";
   if (defined $test_data_file) {
     $data_file = $test_data_file;
-    print STDERR "DEBUG: using test data from \"$data_file\"\n" if $debug || $verbose;
+    log_debug "using test data from \"$data_file\"" if $debug || $verbose;
   } else {
     if (!-d $data_dir) {
       mkdir $data_dir or warn "$0: $data_dir: $!\n";
@@ -285,13 +301,13 @@ sub get_feed_data () {
     $data_file = "$data_dir/$basename";
     my $use_cached_data = 0;
     if (!-f $data_file) {
-      print STDERR "DEBUG: need to get new data because nothing was cached\n" if $debug || $verbose;
+      log_debug 'need to get new data because nothing was cached' if $debug || $verbose;
     } elsif (time - (stat $data_file)[9] > $max_staleness) {
-      print STDERR "DEBUG: need to get new data because cache was stale\n" if $debug || $verbose;
+      log_debug 'need to get new data because cache was stale' if $debug || $verbose;
     } elsif ((stat $data_file)[7] == 0) {
-      print STDERR "DEBUG: need to get new data because cache file was empty\n" if $debug || $verbose;
+      log_debug 'need to get new data because cache file was empty' if $debug || $verbose;
     } else {
-      print STDERR "DEBUG: using cached data\n" if $debug || $verbose;
+      log_debug 'using cached data' if $debug || $verbose;
       $use_cached_data = 1;
     }
     if (!$use_cached_data) {
@@ -314,7 +330,8 @@ sub get_feed_data () {
     my $s = @readahead? pop @readahead: scalar <INPUT>;
   last unless defined $s;
     chomp $s;
-    printf STDERR "DEBUG: state %s input (%s)\n", $state, $s if $debug > 2;
+    log_debug "state $state" if $debug > 2;
+    log_input $s if $debug > 2;
     $s =~ s/\&(?:#xB0|deg);/°/g;
     $s =~ s/\b([Ii])nt'l\b/\1nternational/g;
     my $debug__orig_state = $state;
@@ -363,7 +380,7 @@ sub get_feed_data () {
       } elsif ($s =~ /^\s*<div class="schedule-data day(\d+)">\s*$/) {
 	$regs->{'current-day'} = $1 + 0;
 	$state = STATE__SCHEDULE;
-	printf STDERR "DEBUG: %s schedule for day %s\n", $regs->{'current-channel'}, $1 if $debug > 1;
+	log_debug sprintf '%s schedule for day %s', $regs->{'current-channel'}, $1 if $debug > 1;
       }
     } elsif ($state eq STATE__SCHEDULE || $state eq STATE__SHOW_NAME) {
       if ($s =~ /^\s*<div.*data-(channel)="(.*?)">\s*$/) {
@@ -397,10 +414,10 @@ sub get_feed_data () {
     } else {
       die "$0: Internal error: Reached unknown state \"$state\"\n";
     }
-    print STDERR "DEBUG: switched state from $debug__orig_state to $state\n" if $debug > 1 && $debug__orig_state ne $state;
+    log_debug "switched state from $debug__orig_state to $state" if $debug > 1 && $debug__orig_state ne $state;
   last if $state eq STATE__FOOTER;
   }
-  print STDERR "DEBUG: end of feed reached\n" if $debug;
+  log_debug 'end of feed reached' if $debug;
   close INPUT;
   return $it;
 }
@@ -419,7 +436,7 @@ sub find_language_program ($$) {
   my $target_month = POSIX::strftime('%b', $sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst);
   my $target_dow = uc POSIX::strftime('%a', $sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst);
   my @found;
-  print STDERR "DEBUG: target day $target_day, month $target_month, dow $target_dow\n" if $debug;
+  log_debug "target day $target_day, month $target_month, dow $target_dow" if $debug;
   for my $channel (keys %$data) {
     my $channel_data = $data->{$channel};
     if (ref $channel_data) {
@@ -548,6 +565,7 @@ sub enter_infinite_loop () {
   $next_mode_p = 1;
   my $announcement_delta = 300;
   my $expiry_delta = 60;
+  log_debug 'OMNI TV Cantonese News monitoring loop started' if $debug || $verbose;
   for (my($data, $next_program, $start_time, $end_time, $duration, $announced, $expiry);;) {
     my $now = time;
     my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime $now;
@@ -560,7 +578,7 @@ sub enter_infinite_loop () {
       $next_program = filter_listing $full_listing, $reporting_origin + $reporting_delta;
       (my $flag, $start_time, $end_time, my $time, my $channel, my $dow, my $day, my $month, my $name, $duration) = @{$next_program->{'results'}->[0]} if @{$next_program->{'results'}};
       if (!defined $start_time) {
-	printf STDERR "DEBUG: filter returned zero results, trying to use tomorrow's date\n" if $debug || $verbose;
+	log_debug "filter returned zero results, trying to use tomorrow's date" if $debug || $verbose;
 	$reporting_origin += 86400;
 	$reporting_delta = 0;
 	$full_listing = find_language_program $data, $reporting_origin;
@@ -568,20 +586,20 @@ sub enter_infinite_loop () {
 	($flag, $start_time, $end_time, $time, $channel, $dow, $day, $month, $name, $duration) = @{$next_program->{'results'}->[0]} if @{$next_program->{'results'}};
       }
       if (!defined $start_time) {
-	printf STDERR "DEBUG: still zero results; something is wrong\n" if $debug || $verbose;
+	log_debug "still zero results; something is wrong" if $debug || $verbose;
       } else {
-	printf STDERR "DEBUG: recorded start time %d, end time %d\n", $start_time, $end_time if $debug;
+	log_debug "recorded start time $start_time, end time $end_time" if $debug;
 	# Figure out real start and end times
 	# FIXME this will be wrong if DST changes
 	$start_time = calculate_real_time($start_time, $reporting_origin);
 	$end_time = calculate_real_time($end_time, $reporting_origin);
-	printf STDERR "DEBUG: real start time %d '%s', end time %d '%s'\n", $start_time, POSIX::strftime('%F %T', localtime $start_time), $end_time, POSIX::strftime('%F %T', localtime $end_time) if $debug;
+	log_debug sprintf "real start time %d '%s', end time %d '%s'", $start_time, POSIX::strftime('%F %T', localtime $start_time), $end_time, POSIX::strftime('%F %T', localtime $end_time) if $debug;
 	# If we just finished a matching program then don't bother announcing this one
 	if (defined $previous_end_time && $previous_end_time == $start_time) {
-	  printf STDERR "DEBUG: previous end time = start time, not resetting expiry\n" if $debug || $verbose;
+	  log_debug "previous end time = start time, not resetting expiry" if $debug || $verbose;
 	  $expiry = $end_time - $expiry_delta;
 	} else {
-	  printf STDERR "DEBUG: resetting expiry\n" if $debug || $verbose;
+	  log_debug "resetting expiry" if $debug || $verbose;
 	  undef $announced;
 	  undef $expiry;
 	}
@@ -589,11 +607,11 @@ sub enter_infinite_loop () {
     }
     my $dt = $start_time - $now;
     my $sleep_time;
-    printf STDERR "DEBUG: delta to next program = %d (start time %d '%s')\n", $start_time - $now, $start_time, POSIX::strftime('%F %T', localtime $start_time) if $debug;
+    log_debug sprintf "delta to next program = %d (start time %d '%s')", $start_time - $now, $start_time, POSIX::strftime('%F %T', localtime $start_time) if $debug;
     if ($dt <= $announcement_delta && !defined $announced) {
       my $night_p = POSIX::strftime('%H', localtime $now) =~ /^0[0-7]$/;
       if ($quiet_p && $night_p && $speak_mode_p) {
-	print STDERR "DEBUG: an announcement would have been made but it's night and we're in quiet mode\n" if $debug || $verbose;
+	log_debug "an announcement would have been made but it's night and we're in quiet mode" if $debug || $verbose;
       } else {
 	announce_current_time;
 	display_listing $next_program, $now;
@@ -608,7 +626,7 @@ sub enter_infinite_loop () {
     }
     if (defined $sleep_time) {
       $sleep_time = 1  if $sleep_time < 1;
-      printf STDERR "DEBUG: sleep %d  \n", $sleep_time if $debug;
+      log_debug "sleep $sleep_time" if $debug;
       sleep $sleep_time;
     }
   }
@@ -670,7 +688,7 @@ if ($loop_mode_p) {
   enter_infinite_loop;
 } else {
   my $data = get_feed_data;
-  print STDERR 'DEBUG: parsed data is ' . Dumper $data if $debug;
+  log_debug('parsed data is ' . Dumper $data) if $debug;
 
   my $reporting_origin = $now;
   my $full_listing = find_language_program $data, $reporting_origin;
@@ -679,7 +697,7 @@ if ($loop_mode_p) {
   if ($next_mode_p && !@{$listing->{'results'}}) {
     my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($now + 82800); # 23 hours, to avoid DST issues
     $reporting_origin = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
-    print STDERR "DEBUG: no results were found, adjusting reporting origin to $reporting_origin\n" if $debug || $verbose;
+    log_debug "no results were found, adjusting reporting origin to $reporting_origin" if $debug || $verbose;
     $full_listing = find_language_program $data, $reporting_origin;
     $listing = filter_listing $full_listing, $reporting_origin;
   }
