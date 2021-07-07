@@ -564,12 +564,14 @@ binmode STDERR, ':utf8';
 
 if ($loop_mode_p) {
   $next_mode_p = 1;
-  my $announcement_time = 300;
+  my $announcement_delta = 300;
+  my $expiry_delta = 60;
   for (my($data, $next_program, $start_time, $end_time, $duration, $announced, $expiry);;) {
     my $now = time;
     my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime $now;
-    if (!defined $start_time) {
+    if (!defined $start_time || (defined $expiry && $now > $expiry)) {
       my $midnight_today = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
+      my $previous_end_time = $end_time;
       $data = get_feed_data;
       my $full_listing = find_language_program $data, $now;
       $next_program = filter_listing $full_listing, $now;
@@ -579,18 +581,27 @@ if ($loop_mode_p) {
       $start_time = $midnight_today + 60*$start_time;
       $end_time = $midnight_today + 60*$end_time;
       printf STDERR "DEBUG: real start time %d, end time %d\n", $start_time, $end_time if $debug;
+      # If we just finished a matching program then don't bother announcing this one
+      if (defined $previous_end_time && $previous_end_time == $start_time) {
+	printf STDERR "DEBUG: previous end time = start time, not resetting expiry\n" if $debug || $verbose;
+	$expiry = $end_time - $expiry_delta;
+      } else {
+	printf STDERR "DEBUG: resetting expiry\n" if $debug || $verbose;
+	undef $announced;
+	undef $expiry;
+      }
     }
     my $dt = $start_time - $now;
     my $sleep_time;
     printf STDERR "%d  \n", $start_time - $now if $debug;
-    if ($dt <= $announcement_time && !defined $announced) {
+    if ($dt <= $announcement_delta && !defined $announced) {
       announce_current_time;
       display_listing $next_program, $now;
       $announced = $now;
-      $expiry = $end_time - 60;
+      $expiry = $end_time - $expiry_delta;
       $sleep_time = $expiry - $now;
-    } elsif ($dt > $announcement_time) {
-      $sleep_time = $dt - $announcement_time - 30;
+    } elsif ($dt > $announcement_delta) {
+      $sleep_time = $dt - $announcement_delta - 30;
     } else {
       $sleep_time = 1;
     }
@@ -598,10 +609,6 @@ if ($loop_mode_p) {
       $sleep_time = 1  if $sleep_time < 1;
       printf STDERR "DEBUG: sleep %d  \n", $sleep_time if $debug;
       sleep $sleep_time;
-    }
-    if (defined $expiry && $now > $expiry) {
-      undef $announced;
-      undef $expiry;
     }
   }
 
