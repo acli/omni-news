@@ -605,11 +605,8 @@ sub enter_infinite_loop () {
 	log_debug sprintf "real start time %d '%s', end time %d '%s'", $start_time, POSIX::strftime('%F %T', localtime $start_time), $end_time, POSIX::strftime('%F %T', localtime $end_time) if $debug;
 	# If we just finished a matching program then don't bother announcing this one
 	if (defined $previous_end_time && $previous_end_time == $start_time) {
-	  log_debug "previous end time = start time, not resetting expiry" if $debug || $verbose;
 	  $expiry = $end_time - $expiry_delta;
-	} else {
-	  log_debug "resetting expiry" if $debug || $verbose;
-	  undef $expiry;
+	  log_debug sprintf "previous end time = start time, expiry set to %d '%s'", $expiry, POSIX::strftime('%F %T', localtime $expiry) if $debug || $verbose;
 	}
       }
     }
@@ -628,6 +625,7 @@ sub enter_infinite_loop () {
       $announced = $now;
       $expiry = $end_time - $expiry_delta;
       $sleep_time = $expiry - $now;
+      log_debug sprintf "remembered announced time, expiry set to %d '%s', sleep time set to %d", $expiry, POSIX::strftime('%F %T', localtime $expiry), $sleep_time if $debug || $verbose;
     } elsif ($dt > $announcement_delta) {
       $sleep_time = $dt - $announcement_delta - 30;
     } else {
