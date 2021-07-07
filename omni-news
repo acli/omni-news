@@ -487,10 +487,8 @@ sub filter_listing ($$;$) {
   my @last_valid_program;
 
   $query_type = $query_next_program_p? QUERY__NEXT: $query_main_program_p? QUERY__MAIN: undef if !defined $query_type;
-  print STDERR "query_type=$query_type\n";
   my $query_main_program_p = $query_type eq QUERY__MAIN;
   my $query_next_program_p = $query_main_program_p || $query_type eq QUERY__NEXT;
-  print STDERR "query_main_program_p=$query_main_program_p, query_next_program_p=$query_next_program_p\n";
 
   for my $node (@$data) {
     my($time, $channel, $dow, $day, $month, $name, $duration) = @$node;
@@ -621,7 +619,8 @@ sub enter_infinite_loop () {
   my $announcement_delta = 300;
   my $expiry_delta = 60;
   log_debug 'OMNI TV Cantonese News monitoring loop started' if $debug || $verbose;
-  for (my($data, $next_program, $start_time, $end_time, $name, $announced, $expiry);;) {
+  for (my($data, $main_program, $next_program, $start_time, $end_time, $name, $announced, $expiry);;) {
+    my $recorded_start_time;
     $now = time;
     my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime $now;
     my $midnight_today = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
@@ -630,13 +629,16 @@ sub enter_infinite_loop () {
       my $previous_end_time = $end_time;
       $data = get_feed_data;
       my $full_listing = find_language_program $data, $reporting_origin;
+      $main_program = filter_listing $full_listing, $reporting_origin + $reporting_delta, QUERY__MAIN;
       $next_program = filter_listing $full_listing, $reporting_origin + $reporting_delta;
       (my $flag, $start_time, $end_time, my $time, my $channel, my $dow, my $day, my $month, $name, my $duration) = @{$next_program->{'results'}->[0]} if @{$next_program->{'results'}};
+      $recorded_start_time = $start_time;
       if (!defined $start_time) {
 	log_debug "filter returned zero results, trying to use tomorrow's date" if $debug || $verbose;
 	$reporting_origin += 86400;
 	$reporting_delta = 0;
 	$full_listing = find_language_program $data, $reporting_origin;
+	$main_program = filter_listing $full_listing, $reporting_origin + $reporting_delta, QUERY__MAIN;
 	$next_program = filter_listing $full_listing, $reporting_origin + $reporting_delta;
 	($flag, $start_time, $end_time, $time, $channel, $dow, $day, $month, $name, $duration) = @{$next_program->{'results'}->[0]} if @{$next_program->{'results'}};
       }
@@ -663,6 +665,8 @@ sub enter_infinite_loop () {
       my $night_p = POSIX::strftime('%H', localtime $now) =~ /^0[0-7]$/;
       if ($quiet_p && $night_p && $speak_mode_p) {
 	log_debug "an announcement would have been made but it's night and we're in quiet mode" if $debug || $verbose;
+      } elsif ($query_main_program_p && defined $main_program && @{$main_program->{'results'}} && $main_program->{'results'}->[1] != $recorded_start_time) {
+	log_debug "an announcement would have been made but it's not the main program and we're told to look for that" if $debug || $verbose;
       } else {
 	announce_current_time;
 	display_listing $next_program, $now;
