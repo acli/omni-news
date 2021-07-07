@@ -59,7 +59,8 @@ use vars qw( $prov );
 use vars qw( $now );
 use vars qw( $chinese_p );
 use vars qw( $loop_mode_p );
-use vars qw( $next_mode_p );
+use vars qw( $query_next_program_p );
+use vars qw( $query_main_program_p );
 use vars qw( $speak_mode_p );
 use vars qw( $broadcast_mode_p );
 use vars qw( $quiet_p );
@@ -431,6 +432,11 @@ sub get_feed_data () {
   return $it;
 }
 
+sub news_program_p ($) {
+  my($name) = @_;
+  return $name =~ /\bNews\b/;
+}
+
 sub match_program_language ($$) {
   my($name, $language) = @_;
   my $it = defined $language && $language =~ /\S/ && $name =~ /$language/;
@@ -468,31 +474,50 @@ sub find_language_program ($$) {
 sub filter_listing ($$) {
   my($data, $t) = @_;
   my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($t);
-  my $target_time = 60*$hour + $min if $next_mode_p;
+  my $target_time = 60*$hour + $min if $query_next_program_p;
   my $something_done_p;
   my $all_same_channel_p;
+  my $last_end_time;
   my @data_to_display;
+  my @consecutive;
+  my @last_news_program;
+  my @last_valid_program;
   for my $node (@$data) {
     my($time, $channel, $dow, $day, $month, $name, $duration) = @$node;
     my $broadcast_time = 60*$1 + $2 if $time =~ /^(\d\d):(\d\d)$/;
+    my $end_time = $broadcast_time + $duration;
     my $flag;
     if (!defined $target_time) {
       $flag = 1;
     } elsif ($broadcast_time > $target_time) {
       $flag = 2;
-    } elsif ($broadcast_time < $target_time && ($broadcast_time + $duration) > $target_time) {
+    } elsif ($broadcast_time < $target_time && $end_time > $target_time) {
       $flag = 3;
     }
     if (defined $flag) {
-      push @data_to_display, [$flag, $broadcast_time, $broadcast_time + $duration, $time, $channel, $dow, $day, $month, $name, $duration];
+      push @data_to_display, [$flag, $broadcast_time, $end_time, $time, $channel, $dow, $day, $month, $name, $duration];
       if (!defined $all_same_channel_p) {
 	$all_same_channel_p = $channel;
       } elsif ($all_same_channel_p && $all_same_channel_p ne $channel) {
 	$all_same_channel_p = 0;
       }
+      if (defined $last_end_time && $broadcast_time == $last_end_time) {
+	push @consecutive, $data_to_display[$#data_to_display];
+      } else {
+	@consecutive = ($data_to_display[$#data_to_display]);
+      }
       $something_done_p = 1;
+      $last_end_time = $end_time;
+    } else {
+      @last_valid_program = @data_to_display;
+      @consecutive = ();
     }
+    @last_news_program = ($data_to_display[$#data_to_display]) if news_program_p $name;
   last if $something_done_p && defined $target_time;
+  last if $query_main_program_p && @consecutive == 2;
+  }
+  if ($query_main_program_p) {
+    @data_to_display = @consecutive > 1? @consecutive: @last_news_program? @last_news_program: @last_valid_program;
   }
   return { 'all-same-channel-p' => $all_same_channel_p, 'results' => \@data_to_display };
 }
@@ -571,7 +596,7 @@ sub announce_current_time () {
 }
 
 sub enter_infinite_loop () {
-  $next_mode_p = 1;
+  $query_next_program_p = 1;
   my $announcement_delta = 300;
   my $expiry_delta = 60;
   log_debug 'OMNI TV Cantonese News monitoring loop started' if $debug || $verbose;
@@ -620,7 +645,7 @@ sub enter_infinite_loop () {
       } else {
 	announce_current_time;
 	display_listing $next_program, $now;
-	turn_tv_on if $name =~ /News/;
+	turn_tv_on if news_program_p $name;
       }
       $announced = $now;
       $expiry = $end_time - $expiry_delta;
@@ -674,9 +699,10 @@ GetOptions(
   'I|data-file=s' => \$test_data_file,
   'g|genmon' => \$genmon_mode,
   'loop' => \$loop_mode_p,
-  'n|next' => \$next_mode_p,
+  'n|next' => \$query_next_program_p,
   'q|quiet' => \$quiet_p,
   's|speak' => \$speak_mode_p,
+  'T|today' => \$query_main_program_p,
   'w|sysline' => \$sysline_mode,
   'W|what-if=i' => \$now,
   'v|verbose' => \$verbose,
@@ -701,7 +727,7 @@ if ($loop_mode_p) {
   my $full_listing = find_language_program $data, $reporting_origin;
   my $listing = filter_listing $full_listing, $reporting_origin;
 
-  if ($next_mode_p && !@{$listing->{'results'}}) {
+  if ($query_next_program_p && !@{$listing->{'results'}}) {
     my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($now + 82800); # 23 hours, to avoid DST issues
     $reporting_origin = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
     log_debug "no results were found, adjusting reporting origin to $reporting_origin" if $debug || $verbose;
