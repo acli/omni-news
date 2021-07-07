@@ -514,13 +514,13 @@ sub filter_listing ($$;$) {
       } else {
 	@consecutive = ($data_to_display[$#data_to_display]);
       }
+      @last_news_program = ($data_to_display[$#data_to_display]) if news_program_p $name;
       $something_done_p = 1;
       $last_end_time = $end_time;
     } else {
       @last_valid_program = @data_to_display;
       @consecutive = ();
     }
-    @last_news_program = ($data_to_display[$#data_to_display]) if news_program_p $name;
   last if $something_done_p && defined $target_time;
   last if $query_main_program_p && @consecutive == 2;
   }
@@ -532,7 +532,7 @@ sub filter_listing ($$;$) {
     } elsif (@last_news_program) {
       $it->{'type'} = 'news';
       $it->{'results'} = \@last_news_program;
-    } elsif (@last_news_program) {
+    } elsif (@last_valid_program) {
       $it->{'type'} = 'last';
       $it->{'results'} = \@last_valid_program;
     }
@@ -619,10 +619,11 @@ sub enter_infinite_loop () {
   my $announcement_delta = 300;
   my $expiry_delta = 60;
   log_debug 'OMNI TV Cantonese News monitoring loop started' if $debug || $verbose;
-  for (my($data, $main_program, $next_program, $start_time, $end_time, $name, $announced, $expiry);;) {
+  for (my($data, $main_program, $next_program, $start_time, $end_time, $name, $announced, $expiry, $main_program_p, $last_news_p);;) {
     my $recorded_start_time;
     $now = time;
     my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime $now;
+    my $delta_minutes = 60*$hour + $min;
     my $midnight_today = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
     my($reporting_origin, $reporting_delta) = ($midnight_today, $now - $midnight_today);
     if (!defined $start_time || (defined $expiry && $now > $expiry)) {
@@ -658,6 +659,15 @@ sub enter_infinite_loop () {
 	}
       }
     }
+    if (defined $main_program && @{$main_program->{'results'}}) {
+	my @m = @{$main_program->{'results'}};
+	my $t = $main_program->{'type'};
+	($_, my $main_start_time, $_, $_, $_, $_, $_, $_, my $name1, $_) = @{$m[0]};
+	($_, $_, my $main_end_time, $_, $_, $_, $_, $_, my $name2, $_) = @{$m[$#m]};
+	my $inside_p = $main_start_time <= $delta_minutes && $delta_minutes <= $main_end_time;
+	$main_program_p = $inside_p && $ t eq 'main';
+	$last_news_p = $inside_p && $ t eq 'news';
+    }
     my $dt = $start_time - $now;
     my $sleep_time;
     log_debug sprintf "delta to next program = %d (start time %d '%s')", $start_time - $now, $start_time, POSIX::strftime('%F %T', localtime $start_time) if $debug;
@@ -665,11 +675,13 @@ sub enter_infinite_loop () {
       my $night_p = POSIX::strftime('%H', localtime $now) =~ /^0[0-7]$/;
       if ($quiet_p && $night_p && $speak_mode_p) {
 	log_debug "an announcement would have been made but it's night and we're in quiet mode" if $debug || $verbose;
-      } elsif ($query_main_program_p && defined $main_program && @{$main_program->{'results'}} && $main_program->{'results'}->[1] != $recorded_start_time) {
+      } elsif ($query_main_program_p && !$main_program_p) {
 	log_debug "an announcement would have been made but it's not the main program and we're told to look for that" if $debug || $verbose;
       } else {
 	announce_current_time;
 	display_listing $next_program, $now;
+	communicate($chinese_p? '呢個係今日嘅主要新聞時段': "This is today's main broadcast") if $main_program_p;
+	communicate($chinese_p? '呢個係今日最後一次新聞時段': "This is today's last news broadcast") if $last_news_p;
 	turn_tv_on if news_program_p $name;
       }
       $announced = $now;
