@@ -517,64 +517,14 @@ sub display_listing ($$) {
     communicate $lead . $name . $comment;
     $something_done_p = 1;
   }
-  print "No results were found.\n" unless @$data;
+  return scalar @$data;
 }
 
 sub announce_current_time () {
   communicate sprintf(($chinese_p? '現在係%s': 'It is now %s'), format_time POSIX::strftime('%H:%M', localtime time));
 }
 
-sub usage (;$) {
-  my($st) = @_;
-  my $h = $st? *STDERR: *STDOUT;
-  print $h <<EOF;
-Usage: $0 [OPTION]...
-Figure out when OMNI News Cantonese is being aired by checking the scheduile.
-
-  -A, --all                   Match all programs instead of a specific language
-  -I, --data-file=FILE        Use test feed data in specified FILE
-  -g, --genmon                Terse format suitable as two-line genmon input
-  -n, --next                  Display next match instead of all matches
-      --province=CODE         Use the province identified by the specified CODE
-      --speak                 Speak the result instead of displaying it
-  -w, --sysline               Terse format suitable as a sysline .who file
-  -W, --what-if=TIMESTAMP     Pretend current time is TIMESTAMP (Unix epoch)
-  -v, --verbose               Explain what is being done
-  -z, --chinese               Display results in Chinese
-      --debug                 Produce lots of debugging output
-
-The codes bc and on are known to exist, but it's not known if they air different
-programs in different provinces.
-EOF
-  exit $st;
-}
-
-Getopt::Long::config('bundling');
-GetOptions(
-  'A|all' => sub { $lang = undef },
-  'b|broadcast' => \$broadcast_mode_p,
-  'd|debug' => sub { $debug += 1 },
-  'province=s' => \$prov,
-  'I|data-file=s' => \$test_data_file,
-  'g|genmon' => \$genmon_mode,
-  'loop' => \$loop_mode_p,
-  'n|next' => \$next_mode_p,
-  's|speak' => \$speak_mode_p,
-  'w|sysline' => \$sysline_mode,
-  'W|what-if=i' => \$now,
-  'v|verbose' => \$verbose,
-  'z|zh|chinese' => \$chinese_p,
-  'help' => \&usage,
-) || usage(1);
-
-die "$0: \"$prov\" does not look like a valid city code\n" unless $prov =~ /^[a-z]{2}$/;
-$now = time unless defined $now;
-
-binmode STDIN, ':utf8';
-binmode STDOUT, ':utf8';
-binmode STDERR, ':utf8';
-
-if ($loop_mode_p) {
+sub enter_infinite_loop () {
   $next_mode_p = 1;
   my $announcement_delta = 300;
   my $expiry_delta = 60;
@@ -637,12 +587,75 @@ if ($loop_mode_p) {
       sleep $sleep_time;
     }
   }
+}
 
+sub usage (;$) {
+  my($st) = @_;
+  my $h = $st? *STDERR: *STDOUT;
+  print $h <<EOF;
+Usage: $0 [OPTION]...
+Figure out when OMNI News Cantonese is being aired by checking the scheduile.
+
+  -A, --all                   Match all programs instead of a specific language
+  -I, --data-file=FILE        Use test feed data in specified FILE
+  -g, --genmon                Terse format suitable as two-line genmon input
+  -n, --next                  Display next match instead of all matches
+      --province=CODE         Use the province identified by the specified CODE
+      --speak                 Speak the result instead of displaying it
+  -w, --sysline               Terse format suitable as a sysline .who file
+  -W, --what-if=TIMESTAMP     Pretend current time is TIMESTAMP (Unix epoch)
+  -v, --verbose               Explain what is being done
+  -z, --chinese               Display results in Chinese
+      --debug                 Produce lots of debugging output
+
+The codes bc and on are known to exist, but it's not known if they air different
+programs in different provinces.
+EOF
+  exit $st;
+}
+
+Getopt::Long::config('bundling');
+GetOptions(
+  'A|all' => sub { $lang = undef },
+  'b|broadcast' => \$broadcast_mode_p,
+  'd|debug' => sub { $debug += 1 },
+  'province=s' => \$prov,
+  'I|data-file=s' => \$test_data_file,
+  'g|genmon' => \$genmon_mode,
+  'loop' => \$loop_mode_p,
+  'n|next' => \$next_mode_p,
+  's|speak' => \$speak_mode_p,
+  'w|sysline' => \$sysline_mode,
+  'W|what-if=i' => \$now,
+  'v|verbose' => \$verbose,
+  'z|zh|chinese' => \$chinese_p,
+  'help' => \&usage,
+) || usage(1);
+
+die "$0: \"$prov\" does not look like a valid city code\n" unless $prov =~ /^[a-z]{2}$/;
+$now = time unless defined $now;
+
+binmode STDIN, ':utf8';
+binmode STDOUT, ':utf8';
+binmode STDERR, ':utf8';
+
+if ($loop_mode_p) {
+  enter_infinite_loop;
 } else {
   my $data = get_feed_data;
   print STDERR 'DEBUG: parsed data is ' . Dumper $data if $debug;
 
-  my $full_listing = find_language_program $data, $now;
-  my $listing = filter_listing $full_listing, $now;
-  display_listing $listing, $now;
+  my $reporting_origin = $now;
+  my $full_listing = find_language_program $data, $reporting_origin;
+  my $listing = filter_listing $full_listing, $reporting_origin;
+
+  if ($next_mode_p && !@{$listing->{'results'}}) {
+    my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($now + 82800); # 23 hours, to avoid DST issues
+    $reporting_origin = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
+    print STDERR "DEBUG: no results were found, adjusting reporting origin to $reporting_origin\n" if $debug || $verbose;
+    $full_listing = find_language_program $data, $reporting_origin;
+    $listing = filter_listing $full_listing, $reporting_origin;
+  }
+  display_listing $listing, $reporting_origin
+      or print "No results were found.\n";
 }
