@@ -187,6 +187,18 @@ sub format_language ($) {
   return $chinese_p && defined $lang && $langs{$lang}? $langs{$lang}: $lang;
 }
 
+sub calculate_real_time ($;$) {
+  my($delta_min, $origin) = @_;
+
+  # In theory we can just return $origin + 60*$delta_min, in practice this is wrong because DST is a thing
+  my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(defined $origin? $origin: $now);
+  if (!defined $origin) {
+    $origin = POSIX::mktime(0, 0, 0, $mday, $mon, $year) unless defined $origin;
+    ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime $origin;
+  }
+  return POSIX::mktime(0, $delta_min%60, $delta_min/60, $mday, $mon, $year);
+}
+
 sub macos_p () {
   return -f '/mach_kernel';
 }
@@ -569,31 +581,45 @@ if ($loop_mode_p) {
   for (my($data, $next_program, $start_time, $end_time, $duration, $announced, $expiry);;) {
     my $now = time;
     my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime $now;
+    my $midnight_today = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
+    my($reporting_origin, $reporting_delta) = ($midnight_today, $now - $midnight_today);
     if (!defined $start_time || (defined $expiry && $now > $expiry)) {
-      my $midnight_today = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
       my $previous_end_time = $end_time;
       $data = get_feed_data;
-      my $full_listing = find_language_program $data, $now;
-      $next_program = filter_listing $full_listing, $now;
-      (my $flag, $start_time, $end_time, my $time, my $channel, my $dow, my $day, my $month, my $name, $duration) = @{$next_program->{'results'}->[0]};
-      printf STDERR "DEBUG: recorded start time %d, end time %d\n", $start_time, $end_time if $debug;
-      # Figure out real start and end times
-      $start_time = $midnight_today + 60*$start_time;
-      $end_time = $midnight_today + 60*$end_time;
-      printf STDERR "DEBUG: real start time %d, end time %d\n", $start_time, $end_time if $debug;
-      # If we just finished a matching program then don't bother announcing this one
-      if (defined $previous_end_time && $previous_end_time == $start_time) {
-	printf STDERR "DEBUG: previous end time = start time, not resetting expiry\n" if $debug || $verbose;
-	$expiry = $end_time - $expiry_delta;
+      my $full_listing = find_language_program $data, $reporting_origin;
+      $next_program = filter_listing $full_listing, $reporting_origin + $reporting_delta;
+      (my $flag, $start_time, $end_time, my $time, my $channel, my $dow, my $day, my $month, my $name, $duration) = @{$next_program->{'results'}->[0]} if @{$next_program->{'results'}};
+      if (!defined $start_time) {
+	printf STDERR "DEBUG: filter returned zero results, trying to use tomorrow's date\n" if $debug || $verbose;
+	$reporting_origin += 86400;
+	$reporting_delta = 0;
+	$full_listing = find_language_program $data, $reporting_origin;
+	$next_program = filter_listing $full_listing, $reporting_origin + $reporting_delta;
+	($flag, $start_time, $end_time, $time, $channel, $dow, $day, $month, $name, $duration) = @{$next_program->{'results'}->[0]} if @{$next_program->{'results'}};
+      }
+      if (!defined $start_time) {
+	printf STDERR "DEBUG: still zero results; something is wrong\n" if $debug || $verbose;
       } else {
-	printf STDERR "DEBUG: resetting expiry\n" if $debug || $verbose;
-	undef $announced;
-	undef $expiry;
+	printf STDERR "DEBUG: recorded start time %d, end time %d\n", $start_time, $end_time if $debug;
+	# Figure out real start and end times
+	# FIXME this will be wrong if DST changes
+	$start_time = calculate_real_time($start_time, $reporting_origin);
+	$end_time = calculate_real_time($end_time, $reporting_origin);
+	printf STDERR "DEBUG: real start time %d '%s', end time %d '%s'\n", $start_time, POSIX::strftime('%F %T', localtime $start_time), $end_time, POSIX::strftime('%F %T', localtime $end_time) if $debug;
+	# If we just finished a matching program then don't bother announcing this one
+	if (defined $previous_end_time && $previous_end_time == $start_time) {
+	  printf STDERR "DEBUG: previous end time = start time, not resetting expiry\n" if $debug || $verbose;
+	  $expiry = $end_time - $expiry_delta;
+	} else {
+	  printf STDERR "DEBUG: resetting expiry\n" if $debug || $verbose;
+	  undef $announced;
+	  undef $expiry;
+	}
       }
     }
     my $dt = $start_time - $now;
     my $sleep_time;
-    printf STDERR "%d  \n", $start_time - $now if $debug;
+    printf STDERR "DEBUG: delta to next program = %d (start time %d '%s')\n", $start_time - $now, $start_time, POSIX::strftime('%F %T', localtime $start_time) if $debug;
     if ($dt <= $announcement_delta && !defined $announced) {
       announce_current_time;
       display_listing $next_program, $now;
