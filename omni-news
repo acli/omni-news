@@ -471,8 +471,11 @@ sub find_language_program ($$) {
   return [sort { $a->[0] cmp $b->[0] } @found];
 }
 
-sub filter_listing ($$) {
-  my($data, $t) = @_;
+sub QUERY__NEXT () { 'NEXT' }
+sub QUERY__MAIN () { 'MAIN' }
+
+sub filter_listing ($$;$) {
+  my($data, $t, $query_type) = @_;
   my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($t);
   my $target_time = 60*$hour + $min if $query_next_program_p;
   my $something_done_p;
@@ -482,6 +485,13 @@ sub filter_listing ($$) {
   my @consecutive;
   my @last_news_program;
   my @last_valid_program;
+
+  $query_type = $query_next_program_p? QUERY__NEXT: $query_main_program_p? QUERY__MAIN: undef if !defined $query_type;
+  print STDERR "query_type=$query_type\n";
+  my $query_main_program_p = $query_type eq QUERY__MAIN;
+  my $query_next_program_p = $query_main_program_p || $query_type eq QUERY__NEXT;
+  print STDERR "query_main_program_p=$query_main_program_p, query_next_program_p=$query_next_program_p\n";
+
   for my $node (@$data) {
     my($time, $channel, $dow, $day, $month, $name, $duration) = @$node;
     my $broadcast_time = 60*$1 + $2 if $time =~ /^(\d\d):(\d\d)$/;
@@ -516,14 +526,25 @@ sub filter_listing ($$) {
   last if $something_done_p && defined $target_time;
   last if $query_main_program_p && @consecutive == 2;
   }
+  my $it = { 'all-same-channel-p' => $all_same_channel_p, 'results' => \@data_to_display };
   if ($query_main_program_p) {
-    @data_to_display = @consecutive > 1? @consecutive: @last_news_program? @last_news_program: @last_valid_program;
+    if (@consecutive > 1) {
+      $it->{'type'} = 'main';
+      $it->{'results'} = \@consecutive;
+    } elsif (@last_news_program) {
+      $it->{'type'} = 'news';
+      $it->{'results'} = \@last_news_program;
+    } elsif (@last_news_program) {
+      $it->{'type'} = 'last';
+      $it->{'results'} = \@last_valid_program;
+    }
   }
-  return { 'all-same-channel-p' => $all_same_channel_p, 'results' => \@data_to_display };
+  return $it;
 }
 
 sub display_listing ($$) {
   my($filtered_data, $t) = @_;
+  my $type = $filtered_data->{'type'};
   my $data = $filtered_data->{'results'};
   my $all_same_channel_p = $filtered_data->{'all-same-channel-p'};
 
@@ -542,14 +563,14 @@ sub display_listing ($$) {
 	  $lead .= sprintf('，喺 %s ', format_channel $channel) if $all_same_channel_p;
 	  $lead .= '嘅';
 	  $lead .= format_language($lang) if defined $lang;
-	  $lead .= "節目：\n";
+	  $lead .= sprintf("%s：\n", ($type eq 'main'? '一小時時段': $type eq 'news'? '新聞時段': '節目'));
 	}
 	$lead .= sprintf('%s%s%s', format_time($time), ($speak_mode_p? '至': '～'), $tmp);
 	$lead .= sprintf('喺 %s 播放', format_channel $channel) unless $all_same_channel_p;
 	$lead .= '：'
       } else {
 	if (!$something_done_p) {
-	  $lead .= 'Schedule for ';
+	  $lead .= sprintf('%s for ', ($type eq 'main'? 'Main schedule': $type eq 'news'? 'Last news broadcast': 'Schedule'));
 	  $lead .= sprintf('%s programs on ', $lang) if defined $lang;
 	  $lead .= format_date($month, $day, $dow);
 	  $lead .= sprintf(' on %s', format_channel $channel) if $all_same_channel_p;
