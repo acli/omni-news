@@ -43,6 +43,7 @@ use vars qw( $loop_mode_p );
 use vars qw( $next_mode_p );
 use vars qw( $speak_mode_p );
 use vars qw( $broadcast_mode_p );
+use vars qw( $quiet_p );
 use vars qw( $preferred_English_voice );
 $lang = 'Cantonese';
 $prov = 'on';
@@ -571,8 +572,13 @@ sub enter_infinite_loop () {
     my $sleep_time;
     printf STDERR "DEBUG: delta to next program = %d (start time %d '%s')\n", $start_time - $now, $start_time, POSIX::strftime('%F %T', localtime $start_time) if $debug;
     if ($dt <= $announcement_delta && !defined $announced) {
-      announce_current_time;
-      display_listing $next_program, $now;
+      my $night_p = POSIX::strftime('%H', localtime $now) =~ /^0[0-7]$/;
+      if ($quiet_p && $night_p && $speak_mode_p) {
+	print STDERR "DEBUG: an announcement would have been made but it's night and we're in quiet mode\n" if $debug || $verbose;
+      } else {
+	announce_current_time;
+	display_listing $next_program, $now;
+      }
       $announced = $now;
       $expiry = $end_time - $expiry_delta;
       $sleep_time = $expiry - $now;
@@ -601,6 +607,7 @@ Figure out when OMNI News Cantonese is being aired by checking the scheduile.
   -g, --genmon                Terse format suitable as two-line genmon input
   -n, --next                  Display next match instead of all matches
       --province=CODE         Use the province identified by the specified CODE
+  -q, --quiet                 Do not use speech synthesis after midnight
       --speak                 Speak the result instead of displaying it
   -w, --sysline               Terse format suitable as a sysline .who file
   -W, --what-if=TIMESTAMP     Pretend current time is TIMESTAMP (Unix epoch)
@@ -624,6 +631,7 @@ GetOptions(
   'g|genmon' => \$genmon_mode,
   'loop' => \$loop_mode_p,
   'n|next' => \$next_mode_p,
+  'q|quiet' => \$quiet_p,
   's|speak' => \$speak_mode_p,
   'w|sysline' => \$sysline_mode,
   'W|what-if=i' => \$now,
