@@ -9,7 +9,26 @@
 # Province probably makes a difference, but language doesn't because this is just the master schedule
 # The schedule is a mess of spans and b's (not even divs) that's completely unreadable on w3m
 
+# References (for say(1)):
+# https://developer.apple.com/library/archive/documentation/UserExperience/Conceptual/SpeechSynthesisProgrammingGuide/FineTuning/FineTuning.html
 # https://developer.apple.com/library/archive/documentation/UserExperience/Conceptual/SpeechSynthesisProgrammingGuide/Phonemes/Phonemes.html
+
+# To investigate:
+# https://www.mattmontag.com/personal/mac-os-x-speech-synthesis-markup
+# https://developer.apple.com/documentation/applicationservices/1552235-texttophonemes
+# https://developer.apple.com/documentation/appkit/nsspeechphonemeinfoexample?language=objc
+# https://developer.apple.com/audio/
+# https://developer.apple.com/documentation/avfaudio/avaudiosession/capturing_stereo_audio_from_built-in_microphones
+# https://stackoverflow.com/questions/37529/simple-audio-input-api-on-a-mac
+# -> http://www.portaudio.com/
+# -> https://github.com/PortAudio/portaudio
+
+# Historical knowledge only:
+# https://github.com/zonque/PulseAudioOSX
+
+# Future use only:
+# https://www.musicradar.com/news/someone-finally-came-up-with-a-soundflower-replacement-and-its-free-for-mac-users
+# -> https://github.com/ExistentialAudio/BlackHole/releases
 
 # see https://stackoverflow.com/questions/6162484/why-does-modern-perl-avoid-utf-8-by-default for these crazy hacks
 # THERE ARE MORE CRAZY HACKS THERE FOR MORE COMPLEX PROJECTS!!
