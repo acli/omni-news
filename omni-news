@@ -165,6 +165,11 @@ sub run_cmd (\@) {
   die sprintf "Command %s returned exit status %s\n", $cmd->[0], (defined $st? $st: 'null') unless defined $st && $st == 0;
 }
 
+sub turn_tv_on () {
+  my @cmd = ('ssh', '-l', 'tv-on', 'osmc');
+  return run_cmd @cmd;
+}
+
 sub format_date ($$$) {
   my($month, $day, $dow) = @_;
   my $fmt = $chinese_p? '%s%s日%s': $speak_mode_p? '%3$s %1$s %2$s': '%3$s, %1$s %2$s';
@@ -566,7 +571,7 @@ sub enter_infinite_loop () {
   my $announcement_delta = 300;
   my $expiry_delta = 60;
   log_debug 'OMNI TV Cantonese News monitoring loop started' if $debug || $verbose;
-  for (my($data, $next_program, $start_time, $end_time, $duration, $announced, $expiry);;) {
+  for (my($data, $next_program, $start_time, $end_time, $name, $announced, $expiry);;) {
     my $now = time;
     my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime $now;
     my $midnight_today = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
@@ -576,7 +581,7 @@ sub enter_infinite_loop () {
       $data = get_feed_data;
       my $full_listing = find_language_program $data, $reporting_origin;
       $next_program = filter_listing $full_listing, $reporting_origin + $reporting_delta;
-      (my $flag, $start_time, $end_time, my $time, my $channel, my $dow, my $day, my $month, my $name, $duration) = @{$next_program->{'results'}->[0]} if @{$next_program->{'results'}};
+      (my $flag, $start_time, $end_time, my $time, my $channel, my $dow, my $day, my $month, $name, my $duration) = @{$next_program->{'results'}->[0]} if @{$next_program->{'results'}};
       if (!defined $start_time) {
 	log_debug "filter returned zero results, trying to use tomorrow's date" if $debug || $verbose;
 	$reporting_origin += 86400;
@@ -615,6 +620,7 @@ sub enter_infinite_loop () {
       } else {
 	announce_current_time;
 	display_listing $next_program, $now;
+	turn_tv_on if $name =~ /News/;
       }
       $announced = $now;
       $expiry = $end_time - $expiry_delta;
