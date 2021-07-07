@@ -39,6 +39,7 @@ use vars qw( $lang );
 use vars qw( $prov );
 use vars qw( $now );
 use vars qw( $chinese_p );
+use vars qw( $loop_mode_p );
 use vars qw( $next_mode_p );
 use vars qw( $speak_mode_p );
 use vars qw( $broadcast_mode_p );
@@ -50,6 +51,9 @@ use vars qw( $data_dir $temp_file $esd_server );
 $data_dir = "$ENV{HOME}/.cache/omni-news";
 $temp_file = "$data_dir/temp.wav";
 $esd_server = 'pingviini';
+
+use vars qw( $max_staleness );
+$max_staleness = 86400; # 24 hours
 
 sub STATE__INITIAL   () { 'INITIAL' }
 sub STATE__CHANNEL   () { 'CHANNEL' }
@@ -250,7 +254,7 @@ sub get_feed_data () {
     my $use_cached_data = 0;
     if (!-f $data_file) {
       print STDERR "DEBUG: need to get new data because nothing was cached\n" if $debug || $verbose;
-    } elsif (time - (stat $data_file)[9] > 86400) { # 24 hours
+    } elsif (time - (stat $data_file)[9] > $max_staleness) {
       print STDERR "DEBUG: need to get new data because cache was stale\n" if $debug || $verbose;
     } elsif ((stat $data_file)[7] == 0) {
       print STDERR "DEBUG: need to get new data because cache file was empty\n" if $debug || $verbose;
@@ -361,7 +365,7 @@ sub get_feed_data () {
     } else {
       die "$0: Internal error: Reached unknown state \"$state\"\n";
     }
-    print STDERR "DEBUG: switched state from $debug__orig_state to $state\n" if $debug && $debug__orig_state ne $state;
+    print STDERR "DEBUG: switched state from $debug__orig_state to $state\n" if $debug > 1 && $debug__orig_state ne $state;
   last if $state eq STATE__FOOTER;
   }
   print STDERR "DEBUG: end of feed reached\n" if $debug;
@@ -403,12 +407,10 @@ sub find_language_program ($$) {
   return [sort { $a->[0] cmp $b->[0] } @found];
 }
 
-sub display_listing ($$) {
+sub filter_listing ($$) {
   my($data, $t) = @_;
   my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($t);
   my $target_time = 60*$hour + $min if $next_mode_p;
-
-  # stage 1 - figure out what exactly to display
   my $something_done_p;
   my $all_same_channel_p;
   my @data_to_display;
@@ -434,11 +436,17 @@ sub display_listing ($$) {
     }
   last if $something_done_p && defined $target_time;
   }
+  return { 'all-same-channel-p' => $all_same_channel_p, 'results' => \@data_to_display };
+}
 
-  # stage 2 - actually display the listing
+sub display_listing ($$) {
+  my($filtered_data, $t) = @_;
+  my $data = $filtered_data->{'results'};
+  my $all_same_channel_p = $filtered_data->{'all-same-channel-p'};
+
   my %annotated;
-  $something_done_p = 0;
-  for my $node (@data_to_display) {
+  my $something_done_p = 0;
+  for my $node (@$data) {
     my($flag, $start_time, $end_time, $time, $channel, $dow, $day, $month, $name, $duration) = @$node;
     my $lead;
     my $comment;
@@ -497,7 +505,11 @@ sub display_listing ($$) {
     communicate $lead . $name . $comment;
     $something_done_p = 1;
   }
-  print "No results were found.\n" unless @data_to_display;
+  print "No results were found.\n" unless @$data;
+}
+
+sub announce_current_time () {
+  communicate sprintf(($chinese_p? '現在係%s': 'It is now %s'), format_time POSIX::strftime('%H:%M', localtime time));
 }
 
 sub usage (;$) {
@@ -533,6 +545,7 @@ GetOptions(
   'province=s' => \$prov,
   'I|data-file=s' => \$test_data_file,
   'g|genmon' => \$genmon_mode,
+  'loop' => \$loop_mode_p,
   'n|next' => \$next_mode_p,
   's|speak' => \$speak_mode_p,
   'w|sysline' => \$sysline_mode,
@@ -549,9 +562,54 @@ binmode STDIN, ':utf8';
 binmode STDOUT, ':utf8';
 binmode STDERR, ':utf8';
 
-my $data = get_feed_data;
-print STDERR 'DEBUG: parsed data is ' . Dumper $data if $debug;
+if ($loop_mode_p) {
+  $next_mode_p = 1;
+  my $announcement_time = 300;
+  for (my($data, $next_program, $start_time, $end_time, $duration, $announced, $expiry);;) {
+    my $now = time;
+    my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime $now;
+    if (!defined $start_time) {
+      my $midnight_today = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
+      $data = get_feed_data;
+      my $full_listing = find_language_program $data, $now;
+      $next_program = filter_listing $full_listing, $now;
+      (my $flag, $start_time, $end_time, my $time, my $channel, my $dow, my $day, my $month, my $name, $duration) = @{$next_program->{'results'}->[0]};
+      printf STDERR "DEBUG: recorded start time %d, end time %d\n", $start_time, $end_time if $debug;
+      # Figure out real start and end times
+      $start_time = $midnight_today + 60*$start_time;
+      $end_time = $midnight_today + 60*$end_time;
+      printf STDERR "DEBUG: real start time %d, end time %d\n", $start_time, $end_time if $debug;
+    }
+    my $dt = $start_time - $now;
+    my $sleep_time;
+    printf STDERR "%d  \n", $start_time - $now if $debug;
+    if ($dt <= $announcement_time && !defined $announced) {
+      announce_current_time;
+      display_listing $next_program, $now;
+      $announced = $now;
+      $expiry = $end_time - 60;
+      $sleep_time = $expiry - $now;
+    } elsif ($dt > $announcement_time) {
+      $sleep_time = $dt - $announcement_time - 30;
+    } else {
+      $sleep_time = 1;
+    }
+    if (defined $sleep_time) {
+      $sleep_time = 1  if $sleep_time < 1;
+      printf STDERR "DEBUG: sleep %d  \n", $sleep_time if $debug;
+      sleep $sleep_time;
+    }
+    if (defined $expiry && $now > $expiry) {
+      undef $announced;
+      undef $expiry;
+    }
+  }
 
-my $listing = find_language_program $data, $now;
-display_listing $listing, $now;
+} else {
+  my $data = get_feed_data;
+  print STDERR 'DEBUG: parsed data is ' . Dumper $data if $debug;
 
+  my $full_listing = find_language_program $data, $now;
+  my $listing = filter_listing $full_listing, $now;
+  display_listing $listing, $now;
+}
