@@ -707,8 +707,7 @@ sub enter_infinite_loop () {
 }
 
 sub usage (;$) {
-  my($st) = @_;
-  my $h = $st? *STDERR: *STDOUT;
+  my($st) = @_; my $h = $st? *STDERR: *STDOUT;
   my $url = feed_url;
   print $h <<EOF;
 Usage: $0 [OPTION]...
@@ -724,11 +723,15 @@ Figure out when OMNI News Cantonese is being aired by checking the scheduile.
   -w, --sysline               Terse format suitable as a sysline .who file
   -W, --what-if=TIMESTAMP     Pretend current time is TIMESTAMP (Unix epoch)
   -v, --verbose               Explain what is being done
-  -z, --chinese               Display results in Chinese
-      --debug                 Produce lots of debugging output
+  -z, --chinese               Display (or speak) results in Chinese
+      --debug                 Produce lots of debugging output (can be specified
+                              more than once for additional verbosity)
 
 The codes bc and on are known to exist, but it's not known if they air different
-programs in different provinces.  The data feed is currently assumed to be
+programs in different provinces.
+
+The schedule does not indicate what language a program is aired in so we're
+really just guessing.  It is also sometimes wrong; to double check, go to
 $url
 EOF
   exit $st;
