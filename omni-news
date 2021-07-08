@@ -299,6 +299,10 @@ sub communicate ($) {
   }
 }
 
+sub feed_url () {
+  return "https://www.omnitv.ca/$prov/yue-can/schedule/";
+}
+
 sub get_feed_data () {
   my $data_file;
   my $basename = "$prov.html";
@@ -322,7 +326,7 @@ sub get_feed_data () {
       $use_cached_data = 1;
     }
     if (!$use_cached_data) {
-      my @cmd = ('wget', '-q', '-O', $data_file, "https://www.omnitv.ca/$prov/yue-can/schedule/");
+      my @cmd = ('wget', '-q', '-O', $data_file, feed_url);
       show_cmd @cmd;
       my $pid = fork;
       die "$0: get_feed_data: $cmd[0]: fork: $!\n" unless defined $pid;
@@ -705,6 +709,7 @@ sub enter_infinite_loop () {
 sub usage (;$) {
   my($st) = @_;
   my $h = $st? *STDERR: *STDOUT;
+  my $url = feed_url;
   print $h <<EOF;
 Usage: $0 [OPTION]...
 Figure out when OMNI News Cantonese is being aired by checking the scheduile.
@@ -723,7 +728,8 @@ Figure out when OMNI News Cantonese is being aired by checking the scheduile.
       --debug                 Produce lots of debugging output
 
 The codes bc and on are known to exist, but it's not known if they air different
-programs in different provinces.
+programs in different provinces.  The data feed is currently assumed to be
+$url
 EOF
   exit $st;
 }
