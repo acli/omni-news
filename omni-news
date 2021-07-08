@@ -171,7 +171,12 @@ sub run_cmd (\@) {
 }
 
 sub turn_tv_on () {
-  my @cmd = ('ssh', '-l', 'tv-on', 'osmc');
+  my @cmd = ('ssh', '-T', '-l', 'tv-on', 'osmc');
+  return run_cmd @cmd;
+}
+
+sub turn_tv_off () {
+  my @cmd = ('ssh', '-T', '-l', 'tv-off', 'osmc');
   return run_cmd @cmd;
 }
 
