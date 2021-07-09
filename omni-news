@@ -57,8 +57,10 @@ use vars qw( $verbose );
 use vars qw( $lang );
 use vars qw( $prov );
 use vars qw( $now );
+use vars qw( $delta_t );
 use vars qw( $chinese_p );
 use vars qw( $loop_mode_p );
+use vars qw( $once_p );
 use vars qw( $query_next_program_p );
 use vars qw( $query_main_program_p );
 use vars qw( $speak_mode_p );
@@ -178,6 +180,12 @@ sub turn_tv_on () {
 sub turn_tv_off () {
   my @cmd = ('ssh', '-T', '-l', 'tv-off', 'osmc');
   return run_cmd @cmd;
+}
+
+sub adjusted_time () {
+  my $t = time;
+  $t += $delta_t if defined $delta_t;
+  return $t;
 }
 
 sub format_date ($$$) {
@@ -621,7 +629,7 @@ sub display_listing ($$) {
 }
 
 sub announce_current_time () {
-  communicate sprintf(($chinese_p? '現在係%s': 'It is now %s'), format_time POSIX::strftime('%H:%M', localtime time));
+  communicate sprintf(($chinese_p? '現在係%s': 'It is now %s'), format_time POSIX::strftime('%H:%M', localtime adjusted_time));
 }
 
 sub enter_infinite_loop () {
@@ -629,9 +637,28 @@ sub enter_infinite_loop () {
   my $announcement_delta = 300;
   my $expiry_delta = 1;
   log_debug 'OMNI TV Cantonese News monitoring loop started' if $debug || $verbose;
+  log_debug sprintf '[%s]', join(' ', (
+	(defined $lang? "lang=$lang": ()),
+	(defined $prov? "prov=$prov": ()),
+	(defined $delta_t? "Δt=$delta_t": ()),
+	#(defined $test_data_file? "test-data-file=$test_data_file": ()),
+	sprintf('%sbroadcast', $broadcast_mode_p? '+': '-'),
+	sprintf('%schinese', $chinese_p? '+': '-'),
+	#sprintf('%sdebug', $debug? '+': '-'),
+	#sprintf('%sgenmon', $genmon_mode? '+': '-'),
+	sprintf('%sloop', $loop_mode_p? '+': '-'),
+	sprintf('%sonce', $once_p? '+': '-'),
+	sprintf('%squiet', $quiet_p? '+': '-'),
+	sprintf('%squery-main', $query_main_program_p? '+': '-'),
+	sprintf('%squery-next', $query_next_program_p? '+': '-'),
+	sprintf('%sspeak', $speak_mode_p? '+': '-'),
+	#sprintf('%ssysline', $sysline_mode? '+': '-'),
+	sprintf('%sverbose', $verbose? '+': '-'),
+      )) if $debug || $verbose;
+
   for (my($data, $main_program, $next_program, $start_time, $end_time, $name, $announced, $expiry, $main_program_p, $last_news_p);;) {
     my $recorded_start_time;
-    $now = time;
+    $now = adjusted_time;
     my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime $now;
     my $delta_minutes = 60*$hour + $min;
     my $midnight_today = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
@@ -695,6 +722,7 @@ sub enter_infinite_loop () {
 	communicate($chinese_p? '呢個係今日嘅主要新聞時段': "This is today's main broadcast") if $main_program_p;
 	communicate($chinese_p? '呢個係今日最後一次新聞時段': "This is today's last news broadcast") if $last_news_p;
 	turn_tv_on if $main_program_p || $last_news_p;
+    last if $once_p;
       }
       $announced = $now;
       $expiry = $end_time - $expiry_delta;
@@ -724,6 +752,7 @@ Figure out when OMNI News Cantonese is being aired by checking the scheduile.
   -I, --data-file=FILE        Use test feed data in specified FILE
   -g, --genmon                Terse format suitable as two-line genmon input
   -n, --next                  Display next match instead of all matches
+      --once                  DEBUGGING ONLY: Exit loop after first annoucement
       --province=CODE         Use the province identified by the specified CODE
   -q, --quiet                 Do not use speech synthesis after midnight
       --speak                 Speak the result instead of displaying it
@@ -754,18 +783,19 @@ GetOptions(
   'g|genmon' => \$genmon_mode,
   'loop' => \$loop_mode_p,
   'n|next' => \$query_next_program_p,
+  'once' => \$once_p,
   'q|quiet' => \$quiet_p,
   's|speak' => \$speak_mode_p,
   'T|today' => \$query_main_program_p,
   'w|sysline' => \$sysline_mode,
-  'W|what-if=i' => \$now,
+  'W|what-if=i' => sub { my($key, $val) = @_; $delta_t = $val - time; },
   'v|verbose' => \$verbose,
   'z|zh|chinese' => \$chinese_p,
   'help' => \&usage,
 ) || usage(1);
 
 die "$0: \"$prov\" does not look like a valid city code\n" unless $prov =~ /^[a-z]{2}$/;
-$now = time unless defined $now;
+$now = adjusted_time;
 
 binmode STDIN, ':utf8';
 binmode STDOUT, ':utf8';
