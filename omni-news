@@ -321,13 +321,13 @@ sub get_feed_data () {
     $data_file = "$data_dir/$basename";
     my $use_cached_data = 0;
     if (!-f $data_file) {
-      log_debug 'need to get new data because nothing was cached' if $debug || $verbose;
+      log_debug 'need to get new data because nothing was cached' if $debug;
     } elsif (time - (stat $data_file)[9] > $max_staleness) {
-      log_debug 'need to get new data because cache was stale' if $debug || $verbose;
+      log_debug 'need to get new data because cache was stale' if $debug;
     } elsif ((stat $data_file)[7] == 0) {
-      log_debug 'need to get new data because cache file was empty' if $debug || $verbose;
+      log_debug 'need to get new data because cache file was empty' if $debug;
     } else {
-      log_debug 'using cached data' if $debug || $verbose;
+      log_debug 'using cached data' if $debug;
       $use_cached_data = 1;
     }
     if (!$use_cached_data) {
@@ -627,7 +627,7 @@ sub announce_current_time () {
 sub enter_infinite_loop () {
   $query_next_program_p = 1;
   my $announcement_delta = 300;
-  my $expiry_delta = 60;
+  my $expiry_delta = 1;
   log_debug 'OMNI TV Cantonese News monitoring loop started' if $debug || $verbose;
   for (my($data, $main_program, $next_program, $start_time, $end_time, $name, $announced, $expiry, $main_program_p, $last_news_p);;) {
     my $recorded_start_time;
@@ -645,7 +645,7 @@ sub enter_infinite_loop () {
       (my $flag, $start_time, $end_time, my $time, my $channel, my $dow, my $day, my $month, $name, my $duration) = @{$next_program->{'results'}->[0]} if @{$next_program->{'results'}};
       $recorded_start_time = $start_time;
       if (!defined $start_time) {
-	log_debug "filter returned zero results, trying to use tomorrow's date" if $debug || $verbose;
+	log_debug "filter returned zero results, trying tomorrow's date" if $debug;
 	$reporting_origin += 86400;
 	$reporting_delta = 0;
 	$full_listing = find_language_program $data, $reporting_origin;
@@ -687,21 +687,23 @@ sub enter_infinite_loop () {
 	log_debug "an announcement would have been made but it's night and we're in quiet mode" if $debug || $verbose;
       } elsif ($query_main_program_p && !$main_program_p) {
 	log_debug "an announcement would have been made but it's not the main program and we're told to look for that" if $debug || $verbose;
+      } elsif ($dt < 0 && $speak_mode_p) { # program already started - don't bother announcing
+	;
       } else {
 	announce_current_time;
 	display_listing $next_program, $now;
 	communicate($chinese_p? '呢個係今日嘅主要新聞時段': "This is today's main broadcast") if $main_program_p;
 	communicate($chinese_p? '呢個係今日最後一次新聞時段': "This is today's last news broadcast") if $last_news_p;
-	turn_tv_on if news_program_p $name;
+	turn_tv_on if $main_program_p || $last_news_p;
       }
       $announced = $now;
       $expiry = $end_time - $expiry_delta;
       $sleep_time = $expiry - $now;
       log_debug sprintf "remembered announced time, expiry set to %d '%s', sleep time set to %d", $expiry, POSIX::strftime('%F %T', localtime $expiry), $sleep_time if $debug || $verbose;
-    } elsif ($dt > $announcement_delta) {
-      $sleep_time = $dt - $announcement_delta - 30;
     } else {
-      $sleep_time = 1;
+      $sleep_time = $dt if $sleep_time > $dt;
+      $sleep_time /= 2;
+      $sleep_time = 1 if $sleep_time < 1;
     }
     if (defined $sleep_time) {
       $sleep_time = 1  if $sleep_time < 1;
