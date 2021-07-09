@@ -74,7 +74,7 @@ $temp_file = "$data_dir/temp.wav";
 $esd_server = 'pingviini';
 
 use vars qw( $max_staleness );
-$max_staleness = 86400; # 24 hours
+$max_staleness = 86400; # 24 hours - the published schedule spans 2 weeks so in theory this number can be even bigger but just in case
 
 sub STATE__INITIAL   () { 'INITIAL' }
 sub STATE__CHANNEL   () { 'CHANNEL' }
