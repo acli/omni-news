@@ -674,7 +674,6 @@ sub enter_infinite_loop () {
 	sprintf('%sonce', $once_p? '+': '-'),
 	sprintf('%squiet', $quiet_p? '+': '-'),
 	sprintf('%squery-main', $query_main_program_p? '+': '-'),
-	sprintf('%squery-next', $query_next_program_p? '+': '-'),
 	sprintf('%sspeak', $speak_mode_p? '+': '-'),
 	#sprintf('%ssysline', $sysline_mode? '+': '-'),
 	sprintf('%sverbose', $verbose? '+': '-'),
