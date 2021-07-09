@@ -135,6 +135,7 @@ use vars qw( %chinese_program_name );
   'OMNI News: Cantonese Edition' => '粵語新聞',
   'Focus Cantonese' => '都市聚焦',
   'Showers of Blessings' => '恩雨之聲',
+  'Close to Culture' => '拉近文化', # ??? WTF is this??? [apparently an iCable production]
 );
 
 sub log_something ($$) {
@@ -228,11 +229,13 @@ sub format_time ($) {
 
 sub format_duration ($) {
   my($minutes) = @_;
-  my $hours = $minutes/60;
   my $it;
-  $minutes %= 60;
-  $it .= sprintf(($chinese_p? '%s 小時': '%s %s'), $hours, ($hours == 1? 'hour': 'hours')) if $hours;
-  $it .= sprintf(($chinese_p? '%s 分鐘': '%s %s'), $minutes, ($minutes == 1? 'minute': 'minutes')) if $minutes;
+  if ($minutes) { # the schedule is so inaccurate that some programs are marked as duration0
+    my $hours = $minutes/60;
+    $minutes %= 60;
+    $it .= sprintf(($chinese_p? '%s 小時': '%s %s'), $hours, ($hours == 1? 'hour': 'hours')) if $hours;
+    $it .= sprintf(($chinese_p? '%s 分鐘': '%s %s'), $minutes, ($minutes == 1? 'minute': 'minutes')) if $minutes;
+  }
   return $it;
 }
 
@@ -295,6 +298,7 @@ sub communicate ($) {
   my @opts = ('--file-format', 'WAVE', '--data-format', 'ulaw', '-o', $temp_file) if $broadcast_mode_p;
   my $pause = '[[slnc 1000]]';
   if (!$speak_mode_p) {
+    log_output $s if $debug;
     printf "%s\n", $s;
   } elsif (macos_p && $chinese_p) {
     @cmd = ('say', @opts, '-v', 'Sin-Ji', $s, $pause);
@@ -430,6 +434,19 @@ sub get_feed_data () {
 	$state = STATE__FOOTER;
       } elsif ($s =~ /^\s*<span class="(?:ratings|more)">\s*$/) { # this should happen only if state eq STATE__SHOW_NAME
 	$state = STATE__SCHEDULE;
+      } elsif ($s =~ /^\s*<span class="on-now">\s*(.*?)\s+\((\w+)\)\s+(\d+):(\d\d)\s*-\s*(\d+):(\d\d)\s*([AP]M)\s+(\S+?)<\/span>\s*$/) {
+	my($chk_name, $chk_rating, $chk_start_h, $chk_start_m, $chk_end_h, $chk_end_m, $chk_moity, $chk_tz) = ($1, $2, $3, $4, $5, $6, $8, $8);
+	my $expected_name = $node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'name'};
+	if ($chk_name eq $expected_name) {
+	  $node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'rating'} = $chk_rating;
+	  if ($node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'duration'} == 0) {
+	    my $corrected_duration = (60*$chk_end_h + $chk_end_m) - (60*$chk_start_h + $chk_start_m);
+	    $node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'duration'} = $corrected_duration;
+	    log_debug sprintf 'inferring from on-now record that corrected duration is %d', $corrected_duration if $debug || $verbose;
+	  }
+	} else {
+	  log_debug sprintf 'discarding on-now: expecting %s but found %s', $expected_name, $chk_name if $debug || $verbose;
+	}
       } elsif ($state eq STATE__SHOW_NAME) {
 	$s =~ s/<[^<>]*>//sg;
 	$s =~ s/^\s+//sg;
@@ -595,15 +612,20 @@ sub display_listing ($$) {
 	$lead .= format_time($time);
 	$lead .= sprintf(' on %s', format_channel $channel) unless $all_same_channel_p;
 	$lead .= ': ';
-	$comment = sprintf(' (%s)', format_duration $duration) unless defined $annotated{$name} && $annotated{$name} == $duration;
-	$annotated{$name} = $duration;
+	if (defined $duration && $duration) {
+	  $comment = sprintf(' (%s)', format_duration $duration) unless defined $annotated{$name} && $annotated{$name} == $duration;
+	  $annotated{$name} = $duration;
+	}
       }
     } elsif ($flag == 2) {
       if ($chinese_p) {
 	$lead .= sprintf('%s ', format_channel $channel) unless $all_same_channel_p;
 	$lead .= sprintf('下一個節目係，%s播放，', format_time($time));
-	$lead .= sprintf('%s嘅，', format_duration($duration)) unless defined $annotated{$name} && $annotated{$name} == $duration;
-	$annotated{$name} = $duration;
+	if (defined $duration && $duration) {
+	  $lead .= sprintf('%s嘅，', format_duration($duration)) unless defined $annotated{$name} && $annotated{$name} == $duration;
+	  $annotated{$name} = $duration;
+	}
+	print STDERR Dumper $filtered_data;#XXXZZZ
       } else {
 	$lead .= sprintf('Next at %s', format_time $time);
 	$lead .= sprintf(' on %s', format_channel $channel) unless $all_same_channel_p;
