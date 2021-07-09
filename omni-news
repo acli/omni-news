@@ -130,6 +130,7 @@ use vars qw( %channel_pronunciations );
   'omni2' => ['Omni Two', 'Omni Two'],
 );
 
+# FIXME In theory we can poll https://www.omnitv.ca/on/en/shows/ but the page is pure JS that doesn't even work on Brave (even with shields down)
 use vars qw( %chinese_program_name );
 %chinese_program_name = (
   'OMNI News: Cantonese Edition' => '粵語新聞',
@@ -448,6 +449,7 @@ sub get_feed_data () {
 	  log_debug sprintf 'discarding on-now: expecting %s but found %s', $expected_name, $chk_name if $debug || $verbose;
 	}
       } elsif ($state eq STATE__SHOW_NAME) {
+	$node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'url'} = $1 if $s =~ /<a\b.*?href="([^""]+)"/;
 	$s =~ s/<[^<>]*>//sg;
 	$s =~ s/^\s+//sg;
 	$s =~ s/\s+$//sg;
