@@ -321,11 +321,11 @@ sub get_feed_data () {
     $data_file = "$data_dir/$basename";
     my $use_cached_data = 0;
     if (!-f $data_file) {
-      log_debug 'need to get new data because nothing was cached' if $debug;
+      log_debug 'need to get new data because nothing was cached' if $debug || $verbose;
     } elsif (time - (stat $data_file)[9] > $max_staleness) {
-      log_debug 'need to get new data because cache was stale' if $debug;
+      log_debug 'need to get new data because cache was stale' if $debug || $verbose;
     } elsif ((stat $data_file)[7] == 0) {
-      log_debug 'need to get new data because cache file was empty' if $debug;
+      log_debug 'need to get new data because cache file was empty' if $debug || $verbose;
     } else {
       log_debug 'using cached data' if $debug;
       $use_cached_data = 1;
