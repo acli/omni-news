@@ -442,7 +442,7 @@ sub get_feed_data () {
 	  if ($node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'duration'} == 0) {
 	    my $corrected_duration = (60*$chk_end_h + $chk_end_m) - (60*$chk_start_h + $chk_start_m);
 	    $node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'duration'} = $corrected_duration;
-	    log_debug sprintf 'inferring from on-now record that corrected duration is %d', $corrected_duration if $debug || $verbose;
+	    log_debug sprintf 'on-now record suggests correct duration for %s is %d', $chk_name, $corrected_duration if $debug || $verbose;
 	  }
 	} else {
 	  log_debug sprintf 'discarding on-now: expecting %s but found %s', $expected_name, $chk_name if $debug || $verbose;
