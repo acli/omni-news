@@ -297,7 +297,9 @@ sub communicate ($) {
   my($s) = @_;
   my @cmd;
   # DVD quality = 48k = 49152, CD = 44.1k = 50×294×3  = 44100, tape = 32k = 32768, AM radio = 22.05k (= 22050?), phone = 8k = 8192
-  my @opts = ('--file-format', 'WAVE', '--data-format', 'ulaw', '--bit-rate', '8192', '-o', $temp_file) if $broadcast_mode_p;
+  # Passing most of these to --bit-rate doesn't actually work; in particular, setting it to 8k will appear to work but produce silence.
+  # Default rate seems to be 22050, but explicitly setting it to 22050 will give "Setting bit rate failed: prop"; I hate Apple.
+  my @opts = ('--file-format', 'WAVE', '--data-format', 'ulaw', '-o', $temp_file) if $broadcast_mode_p;
   my $pause = '[[slnc 1000]]';
   if (!$speak_mode_p) {
     log_output $s if $debug;
