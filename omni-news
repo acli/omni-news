@@ -522,6 +522,7 @@ sub filter_listing ($$;$) {
   my @consecutive;
   my @last_news_program;
   my @last_valid_program;
+  my $has_news_p;
 
   $query_type = $query_next_program_p? QUERY__NEXT: $query_main_program_p? QUERY__MAIN: undef if !defined $query_type;
   my $query_main_program_p = $query_type eq QUERY__MAIN;
@@ -559,7 +560,7 @@ sub filter_listing ($$;$) {
       @consecutive = ();
     }
   last if $something_done_p && defined $target_time;
-  last if $query_main_program_p && @consecutive == 2;
+  last if $query_main_program_p && @consecutive == 2 && news_program_p $name;
   }
   my $it = { 'all-same-channel-p' => $all_same_channel_p, 'results' => \@data_to_display };
   if ($query_main_program_p) {
