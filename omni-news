@@ -629,7 +629,6 @@ sub display_listing ($$) {
 	  $lead .= sprintf('%s嘅，', format_duration($duration)) unless defined $annotated{$name} && $annotated{$name} == $duration;
 	  $annotated{$name} = $duration;
 	}
-	print STDERR Dumper $filtered_data;#XXXZZZ
       } else {
 	$lead .= sprintf('Next at %s', format_time $time);
 	$lead .= sprintf(' on %s', format_channel $channel) unless $all_same_channel_p;
