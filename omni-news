@@ -139,6 +139,22 @@ use vars qw( %chinese_program_name );
   'Close to Culture' => '拉近文化', # ??? WTF is this??? [apparently an iCable production]
 );
 
+use vars qw( $lat $lon );
+use vars qw( $use_datetime_event_sunrise );
+use vars qw( $use_datetime_astro_sunrise );
+use vars qw( $use_astro_sunrise );
+BEGIN {
+  if (eval { require DateTime::Event::Sunrise; }) {
+    $use_datetime_event_sunrise = 1;
+  } elsif (eval { require DateTime::Astro::Sunrise; }) {
+    $use_datetime_astro_sunrise = 1;
+  } elsif (eval { require Astro::Sunrise; }) {
+    $use_astro_sunrise = 1;
+  } else {
+    die "Cannot find a usable Sunrise package";
+  }
+}
+
 sub log_something ($$) {
   my($msg, $flag) = @_;
   chomp $msg;
@@ -184,6 +200,93 @@ sub turn_tv_off () {
   return run_cmd @cmd;
 }
 
+sub estimate_sunrise ($) {
+  my($t) = @_;
+  my($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = localtime $t;
+  my $dt = DateTime->new(year => $year + 1900, month => $mon + 1, day => $mday) if $use_datetime_event_sunrise || $use_datetime_astro_sunrise;
+  my $tmp;
+  my $it;
+  if ($use_datetime_event_sunrise) {
+    my $sunrise = DateTime::Event::Sunrise->new(latitude => $lat, longitude => $lon, precise => 1);
+    $tmp = $sunrise->sunrise_sunset_span($dt)->start;
+    $it = $tmp->strftime('%s');
+  } elsif ($use_datetime_astro_sunrise) {
+    my $sunrise = DateTime::Astro::Sunrise->new($lat, $lon, undef, 1);
+    $tmp = ($sunrise->sunrise($dt))[0];
+    $it = $tmp->strftime('%s');
+  } else {
+    no integer;
+    my $tz = ($2 + $3/60) * ($1 eq '-'? -1: 1) if POSIX::strftime('%z', localtime $t) =~ /^([-\+])(\d\d)(\d\d)$/;
+    my($sunrise, $sunset) = Astro::Sunrise::sunrise($year + 1900, $mon + 1, $mday, $lon, $lat, $tz, $isdst);
+    $tmp = $sunrise;
+    $it = POSIX::mktime(0, $2, $1, $mday, $mon, $year) if $tmp =~ /^(\d\d):(\d\d)$/;
+  }
+  return $it;
+}
+
+sub estimate_sunset ($) {
+  my($t) = @_;
+  my($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = localtime $t;
+  my $dt = DateTime->new(year => $year + 1900, month => $mon + 1, day => $mday) if $use_datetime_event_sunrise || $use_datetime_astro_sunrise;
+  my $tmp;
+  my $it;
+  if ($use_datetime_event_sunrise) {
+    my $sunrise = DateTime::Event::Sunrise->new(latitude => $lat, longitude => $lon, precise => 1);
+    $tmp = $sunrise->sunrise_sunset_span($dt)->end;
+    $it = $tmp->strftime('%s');
+  } elsif ($use_datetime_astro_sunrise) {
+    my $sunrise = DateTime::Astro::Sunrise->new($lat, $lon, undef, 1);
+    $tmp = ($sunrise->sunrise($dt))[1];
+    $it = $tmp->strftime('%s');
+  } else {
+    # this should be the same as the else case in estimate_sunrise except the last line
+    no integer;
+    my $tz = ($2 + $3/60) * ($1 eq '-'? -1: 1) if POSIX::strftime('%z', localtime $t) =~ /^([-\+])(\d\d)(\d\d)$/;
+    my($sunrise, $sunset) = Astro::Sunrise::sunrise($year + 1900, $mon + 1, $mday, $lon, $lat, $tz, $isdst);
+    $tmp = $sunset;
+    $it = POSIX::mktime(0, $2, $1, $mday, $mon, $year) if $tmp =~ /^(\d\d):(\d\d)$/;
+  }
+  return $it;
+}
+
+sub guess_city () {
+  my $input = '/etc/localtime';
+  my $det = readlink $input;
+  die "$input: $!\n" unless defined $det;
+  return $1 if $det =~ /([^\/]+)$/s;
+}
+
+sub guess_coordinates () {
+  my $it;
+  my $city = guess_city;
+  print STDERR "guessed city=($city)\n" if $debug;
+  my @cmd = qw(hebcal cities);
+  print STDERR 'DEBUG: running: ', join(' ', @cmd), "\n" if $debug;
+  my $pid = open(INPUT, '-|');
+  die "$0: guess_coordinates: $cmd[0]: fork: $!\n" unless defined $pid;
+  if ($pid) {
+    my $re = quotemeta $city;
+    for (;;) {
+      my $s = scalar <INPUT>;
+    last unless defined $s;
+      chomp;
+      if ($s =~ /^$re \((\d+)d(\d+)' ([NS]) lat, (\d+)d(\d+)' [EW] long/) {
+        no integer;
+        $it = {
+              'lat' => ($1 + $2/60)*($3 eq 'N'? 1: -1),
+              'lon' => ($4 + $5/60)*($6 eq 'E'? 1: -1),
+            };
+      }
+    last if defined $it;
+    }
+    close INPUT;
+  } else {
+    exec {$cmd[0]} @cmd;
+    die "$0: guess_coordinates: $cmd[0]: exec: $!\n";
+  }
+  return $it;
+}
+
 sub adjusted_time () {
   my $t = time;
   $t += $delta_t if defined $delta_t;
@@ -199,6 +302,13 @@ sub format_date ($$$) {
 sub format_time ($) {
   my($time) = @_;
   my($hour, $minute) = $time =~ /^(\d\d):(\d\d)$/? ($1 + 0, $2 + 0): $time =~ /^(\d+)$/? ($time/60, $time%60): undef;
+  ($_, $_, $_, my $mday, my $mon, my $year) = localtime $now;
+  my $midnight_today = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
+  my $t = POSIX::mktime(0, $minute, $hour, $mday, $mon, $year);
+  my $sunrise = estimate_sunrise $now;
+  my $sunset = estimate_sunset $now;
+  my $before_sunrise_p = $t < $sunrise;
+  my $after_sunset_p = $t >= $sunset;
   my $it;
   if ($chinese_p) {
     my $h = ($hour + 11)%12 + 1;
@@ -212,7 +322,7 @@ sub format_time ($) {
       }
     }
     my $fmt = $speak_mode_p? '%s%s點': '%s%s時';
-    $it = sprintf($fmt, ($hour == 0? '午夜': $hour < 6? '凌晨': $hour < 12? '上午': $hour == 12? '中午': $hour < 20? '下午': '晚上'), $h);
+    $it = sprintf($fmt, ($hour == 0 && $minute == 0? '午夜': $hour == 12 && $minute == 0? '中午': $before_sunrise_p? '凌晨': $after_sunset_p? '晚上': $hour < 12? '上午': '下午'), $h);
     if ($minute == 30) {
       $it .= '半';
     } elsif ($minute) {
@@ -514,6 +624,14 @@ sub find_language_program ($$) {
 sub QUERY__NEXT () { 'NEXT' }
 sub QUERY__MAIN () { 'MAIN' }
 
+sub RESULT__MAIN_SEGMENT        () { 'main' }
+sub RESULT__LAST_NEWS_BROADCAST () { 'news' }
+sub RESULT__LAST_VALID_PROGRAM  () { 'last' }
+
+sub FLAG__TODAYS_SCHEDULE       () { 1 }
+sub FLAG__UPCOMING_PROGRAM      () { 2 }
+sub FLAG__CURRENT_PROGRAM       () { 3 }
+
 sub filter_listing ($$;$) {
   my($data, $t, $query_type) = @_;
   my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($t);
@@ -523,11 +641,13 @@ sub filter_listing ($$;$) {
   my $last_end_time;
   my @data_to_display;
   my @consecutive;
+  my $consecutive_has_news_p;
   my @last_news_program;
   my @last_valid_program;
   my $has_news_p;
 
   $query_type = $query_next_program_p? QUERY__NEXT: $query_main_program_p? QUERY__MAIN: undef if !defined $query_type;
+  print STDERR "GOT HERE, query-type=$query_type\n";
   my $query_main_program_p = $query_type eq QUERY__MAIN;
   my $query_next_program_p = $query_main_program_p || $query_type eq QUERY__NEXT;
 
@@ -537,11 +657,11 @@ sub filter_listing ($$;$) {
     my $end_time = $broadcast_time + $duration;
     my $flag;
     if (!defined $target_time) {
-      $flag = 1;
+      $flag = FLAG__TODAYS_SCHEDULE;
     } elsif ($broadcast_time > $target_time) {
-      $flag = 2;
-    } elsif ($broadcast_time < $target_time && $end_time > $target_time) {
-      $flag = 3;
+      $flag = FLAG__UPCOMING_PROGRAM;
+    } elsif ($broadcast_time <= $target_time && $target_time <= $end_time) {
+      $flag = FLAG__CURRENT_PROGRAM;
     }
     if (defined $flag) {
       push @data_to_display, [$flag, $broadcast_time, $end_time, $time, $channel, $dow, $day, $month, $name, $duration];
@@ -558,23 +678,24 @@ sub filter_listing ($$;$) {
       @last_news_program = ($data_to_display[$#data_to_display]) if news_program_p $name;
       $something_done_p = 1;
       $last_end_time = $end_time;
+      $consecutive_has_news_p = 1 if news_program_p $name;
     } else {
       @last_valid_program = @data_to_display;
       @consecutive = ();
+      $consecutive_has_news_p = 0;
     }
-  last if $something_done_p && defined $target_time;
-  last if $query_main_program_p && @consecutive == 2 && news_program_p $name;
+  last if $query_main_program_p? @consecutive == 2: $something_done_p && defined $target_time;
   }
   my $it = { 'all-same-channel-p' => $all_same_channel_p, 'results' => \@data_to_display };
   if ($query_main_program_p) {
-    if (@consecutive > 1) {
-      $it->{'type'} = 'main';
+    if (@consecutive > 1 && $consecutive_has_news_p) {
+      $it->{'type'} = RESULT__MAIN_SEGMENT;
       $it->{'results'} = \@consecutive;
     } elsif (@last_news_program) {
-      $it->{'type'} = 'news';
+      $it->{'type'} = RESULT__LAST_NEWS_BROADCAST;
       $it->{'results'} = \@last_news_program;
     } elsif (@last_valid_program) {
-      $it->{'type'} = 'last';
+      $it->{'type'} = RESULT__LAST_VALID_PROGRAM;
       $it->{'results'} = \@last_valid_program;
     }
   }
@@ -593,7 +714,7 @@ sub display_listing ($$) {
     my($flag, $start_time, $end_time, $time, $channel, $dow, $day, $month, $name, $duration) = @$node;
     my $lead;
     my $comment;
-    if ($flag == 1) {
+    if ($flag == FLAG__TODAYS_SCHEDULE) {
       if ($chinese_p) {
 	my $tmp = format_time($end_time);
 	$tmp =~ s/午夜|凌晨|上午|中午|下午|晚上//;
@@ -602,14 +723,14 @@ sub display_listing ($$) {
 	  $lead .= sprintf('，喺 %s ', format_channel $channel) if $all_same_channel_p;
 	  $lead .= '嘅';
 	  $lead .= format_language($lang) if defined $lang;
-	  $lead .= sprintf("%s：\n", ($type eq 'main'? '一小時時段': $type eq 'news'? '新聞時段': '節目'));
+	  $lead .= sprintf("%s：\n", ($type eq RESULT__MAIN_SEGMENT? '主要新聞時段': $type eq RESULT__LAST_NEWS_BROADCAST? '新聞時段': '節目'));
 	}
 	$lead .= sprintf('%s%s%s', format_time($time), ($speak_mode_p? '至': '～'), $tmp);
 	$lead .= sprintf('喺 %s 播放', format_channel $channel) unless $all_same_channel_p;
 	$lead .= '：'
       } else {
 	if (!$something_done_p) {
-	  $lead .= sprintf('%s for ', ($type eq 'main'? 'Main schedule': $type eq 'news'? 'Last news broadcast': 'Schedule'));
+	  $lead .= sprintf('%s for ', ($type eq RESULT__MAIN_SEGMENT? 'Main segment': $type eq RESULT__LAST_NEWS_BROADCAST? 'Last news broadcast': 'Schedule'));
 	  $lead .= sprintf('%s programs on ', $lang) if defined $lang;
 	  $lead .= format_date($month, $day, $dow);
 	  $lead .= sprintf(' on %s', format_channel $channel) if $all_same_channel_p;
@@ -623,7 +744,7 @@ sub display_listing ($$) {
 	  $annotated{$name} = $duration;
 	}
       }
-    } elsif ($flag == 2) {
+    } elsif ($flag == FLAG__UPCOMING_PROGRAM) {
       if ($chinese_p) {
 	$lead .= sprintf('%s ', format_channel $channel) unless $all_same_channel_p;
 	$lead .= sprintf('下一個節目係，%s播放，', format_time($time));
@@ -636,7 +757,7 @@ sub display_listing ($$) {
 	$lead .= sprintf(' on %s', format_channel $channel) unless $all_same_channel_p;
 	$lead .= ': ';
       }
-    } elsif ($flag == 3) {
+    } elsif ($flag == FLAG__CURRENT_PROGRAM) {
       if ($chinese_p) {
 	$lead .= sprintf('%s ', format_channel $channel) unless $all_same_channel_p;
 	$lead .= '現正播放嘅節目係：';
@@ -681,6 +802,10 @@ sub enter_infinite_loop () {
 	#sprintf('%ssysline', $sysline_mode? '+': '-'),
 	sprintf('%sverbose', $verbose? '+': '-'),
       )) if $debug || $verbose;
+  log_debug sprintf '[%s]', join(' ', (
+	"lat=$lat",
+	"lon=$lon",
+      )) if $debug || $verbose;
 
   for (my($data, $main_program, $next_program, $start_time, $end_time, $name, $announced, $expiry, $main_program_p, $last_news_p);;) {
     my $recorded_start_time;
@@ -717,7 +842,7 @@ sub enter_infinite_loop () {
 	log_debug sprintf "real start time %d '%s', end time %d '%s'", $start_time, POSIX::strftime('%F %T', localtime $start_time), $end_time, POSIX::strftime('%F %T', localtime $end_time) if $debug;
 	# If we just finished a matching program then don't bother announcing this one
 	if (defined $previous_end_time && $previous_end_time == $start_time) {
-	  $expiry = $end_time - $expiry_delta;
+	  $expiry = $end_time - $expiry_delta; # avoid re-checking main-program-p before next announcement because we just announced
 	  log_debug sprintf "previous end time = start time, expiry set to %d '%s'", $expiry, POSIX::strftime('%F %T', localtime $expiry) if $debug || $verbose;
 	}
       }
@@ -727,9 +852,10 @@ sub enter_infinite_loop () {
 	my $t = $main_program->{'type'};
 	($_, my $main_start_time, $_, $_, $_, $_, $_, $_, my $name1, $_) = @{$m[0]};
 	($_, $_, my $main_end_time, $_, $_, $_, $_, $_, my $name2, $_) = @{$m[$#m]};
-	my $inside_p = $main_start_time <= $delta_minutes && $delta_minutes <= $main_end_time;
-	$main_program_p = $inside_p && $ t eq 'main';
-	$last_news_p = $inside_p && $ t eq 'news';
+	my $det = $delta_minutes + $announcement_delta/60; # we can't just use $delta_minutes because announcement is a few minutes before
+	my $inside_p = $main_start_time <= $det && $det <= $main_end_time;
+	$main_program_p = $inside_p && $t eq RESULT__MAIN_SEGMENT;
+	$last_news_p = $inside_p && $t eq RESULT__LAST_NEWS_BROADCAST;
     }
     my $dt = $start_time - $now;
     my $sleep_time;
@@ -751,7 +877,7 @@ sub enter_infinite_loop () {
     last if $once_p;
       }
       $announced = $now;
-      $expiry = $end_time - $expiry_delta;
+      $expiry = $end_time - $announcement_delta - $expiry_delta; # must re-check main-program-p before announcement
       $sleep_time = $expiry - $now;
       log_debug sprintf "remembered announced time, expiry set to %d '%s', sleep time set to %d", $expiry, POSIX::strftime('%F %T', localtime $expiry), $sleep_time if $debug || $verbose;
     } else {
@@ -826,6 +952,10 @@ $now = adjusted_time;
 binmode STDIN, ':utf8';
 binmode STDOUT, ':utf8';
 binmode STDERR, ':utf8';
+
+my $coords = guess_coordinates;
+($lat, $lon) = ($coords->{'lat'}, $coords->{'lon'}) unless defined $lat;
+die "$0: Can't determine coordinates\n" unless defined $coords;
 
 if ($loop_mode_p) {
   enter_infinite_loop;
