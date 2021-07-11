@@ -647,7 +647,6 @@ sub filter_listing ($$;$) {
   my $has_news_p;
 
   $query_type = $query_next_program_p? QUERY__NEXT: $query_main_program_p? QUERY__MAIN: undef if !defined $query_type;
-  print STDERR "GOT HERE, query-type=$query_type\n";
   my $query_main_program_p = $query_type eq QUERY__MAIN;
   my $query_next_program_p = $query_main_program_p || $query_type eq QUERY__NEXT;
 
