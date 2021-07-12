@@ -70,10 +70,11 @@ use vars qw( $preferred_English_voice );
 $lang = 'Cantonese';
 $prov = 'on';
 
-use vars qw( $data_dir $temp_file $esd_server );
+use vars qw( $data_dir $temp_file $esd_server $pa_server );
 $data_dir = "$ENV{HOME}/.cache/omni-news";
 $temp_file = "$data_dir/temp.wav";
-$esd_server = 'pingviini';
+#$esd_server = 'pingviini';
+$pa_server = 'osmc';
 
 use vars qw( $max_staleness );
 $max_staleness = 3*86400; # 3 days - the published schedule spans 2 weeks so in theory this number can be even bigger but just in case
@@ -424,7 +425,11 @@ sub communicate ($) {
   if (@cmd) {
     run_cmd @cmd;
     if ($broadcast_mode_p) {
-      @cmd = ('esdplay', '-s', $esd_server, $temp_file);
+      if (defined $pa_server) {
+	@cmd = ('paplay', '-s', $pa_server, $temp_file);
+      } else {
+	@cmd = ('esdplay', '-s', $esd_server, $temp_file);
+      }
       run_cmd @cmd;
     }
   }
