@@ -70,11 +70,11 @@ use vars qw( $preferred_English_voice );
 $lang = 'Cantonese';
 $prov = 'on';
 
-use vars qw( $data_dir $temp_file $esd_server $pa_server );
+use vars qw( $data_dir $temp_file $esd_server $pa_server $pa_sink );
 $data_dir = "$ENV{HOME}/.cache/omni-news";
 $temp_file = "$data_dir/temp.wav";
 #$esd_server = 'pingviini';
-$pa_server = 'osmc';
+($pa_server, $pa_sink) = ('osmc', 'rtp');
 
 use vars qw( $max_staleness );
 $max_staleness = 3*86400; # 3 days - the published schedule spans 2 weeks so in theory this number can be even bigger but just in case
@@ -184,21 +184,38 @@ sub show_cmd (\@) {
       }: "\"$_\""): /\s/? "'$_'": $_ } @$cmd) if $debug || $verbose;
 }
 
-sub run_cmd (\@) {
-  my($cmd) = @_;
+sub RUN_CMD__IGNORE_ERRORS  () { 1 }
+sub RUN_CMD__IGNORE_SIGNALS () { 2 }
+
+sub run_cmd (\@;$) {
+  my($cmd, $opt) = @_;
   show_cmd @$cmd;
   my $st = system { $cmd->[0] } @$cmd;
-  die sprintf "Command %s returned exit status %s\n", $cmd->[0], (defined $st? $st: 'null') unless defined $st && $st == 0;
+
+  # Try to be reasonable when it comes to allowing ^C to do its thing but ignoring errors
+  my($msg, $fatal_p);
+  if ($st & 127) {
+    $msg = sprintf('Command %s killed by signal %d', $cmd->[0], $st & 127);
+    $fatal_p = defined $opt && ($opt & RUN_CMD__IGNORE_SIGNALS);
+  } elsif ($st) {
+    $msg = sprintf('Command %s returned exit status %d', $cmd->[0], $st >> 8);
+    $fatal_p = defined $opt && ($opt & RUN_CMD__IGNORE_ERRORS);
+  }
+  if (defined $msg) {
+    die "Unexpected error: $msg\n" if defined $fatal_p && $fatal_p;
+    log_debug $msg;
+  }
+  return $st;
 }
 
 sub turn_tv_on () {
   my @cmd = ('ssh', '-T', '-l', 'tv-on', 'osmc');
-  return run_cmd @cmd;
+  return run_cmd @cmd, RUN_CMD__IGNORE_ERRORS;
 }
 
 sub turn_tv_off () {
   my @cmd = ('ssh', '-T', '-l', 'tv-off', 'osmc');
-  return run_cmd @cmd;
+  return run_cmd @cmd, RUN_CMD__IGNORE_ERRORS;
 }
 
 sub estimate_sunrise ($) {
@@ -423,10 +440,10 @@ sub communicate ($) {
     @cmd = ('espeak', $s);
   }
   if (@cmd) {
-    run_cmd @cmd;
+    run_cmd @cmd, RUN_CMD__IGNORE_ERRORS;
     if ($broadcast_mode_p) {
       if (defined $pa_server) {
-	@cmd = ('paplay', '-s', $pa_server, $temp_file);
+	@cmd = ('paplay', '-s', $pa_server, (defined $pa_sink? ('-d', $pa_sink): ()), $temp_file);
       } else {
 	@cmd = ('esdplay', '-s', $esd_server, $temp_file);
       }
