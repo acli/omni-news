@@ -61,11 +61,13 @@ use vars qw( $delta_t );
 use vars qw( $chinese_p );
 use vars qw( $loop_mode_p );
 use vars qw( $once_p );
+use vars qw( $dry_run_p );
 use vars qw( $query_next_program_p );
 use vars qw( $query_main_program_p );
 use vars qw( $speak_mode_p );
 use vars qw( $broadcast_mode_p );
 use vars qw( $quiet_p );
+use vars qw( $buffered_speech_p $buffered_speech );
 use vars qw( $preferred_English_voice );
 $lang = 'Cantonese';
 $prov = 'on';
@@ -176,9 +178,9 @@ sub log_output ($) {
   return log_something $_[0], '>';
 }
 
-sub show_cmd (\@) {
-  my($cmd) = @_;
-  log_debug sprintf 'running: %s', join(' ', map { /'/? (/"/? eval {
+sub show_cmd (\@;$) {
+  my($cmd, $dry_run_p) = @_;
+  log_debug sprintf '%s: %s', (defined $dry_run_p && $dry_run_p? 'pretending to run': 'running'), join(' ', map { /'/? (/"/? eval {
 	s/"/\\"/;
 	"\"$_\"";
       }: "\"$_\""): /\s/? "'$_'": $_ } @$cmd) if $debug || $verbose;
@@ -187,7 +189,7 @@ sub show_cmd (\@) {
 sub RUN_CMD__IGNORE_ERRORS  () { 1 }
 sub RUN_CMD__IGNORE_SIGNALS () { 2 }
 
-sub run_cmd (\@;$) {
+sub run_cmd_real (\@;$) {
   my($cmd, $opt) = @_;
   show_cmd @$cmd;
   my $st = system { $cmd->[0] } @$cmd;
@@ -206,6 +208,15 @@ sub run_cmd (\@;$) {
     log_debug $msg;
   }
   return $st;
+}
+
+sub run_cmd (\@;$) {
+  my($cmd, $opt) = @_;
+  if ($dry_run_p) {
+    show_cmd @$cmd, $dry_run_p;
+  } else {
+    run_cmd_real @$cmd, $opt;
+  }
 }
 
 sub turn_tv_on () {
@@ -277,9 +288,9 @@ sub guess_city () {
 sub guess_coordinates () {
   my $it;
   my $city = guess_city;
-  print STDERR "guessed city=($city)\n" if $debug;
+  log_debug "guessed city=($city)" if $debug;
   my @cmd = qw(hebcal cities);
-  print STDERR 'DEBUG: running: ', join(' ', @cmd), "\n" if $debug;
+  show_cmd @cmd if $debug;
   my $pid = open(INPUT, '-|');
   die "$0: guess_coordinates: $cmd[0]: fork: $!\n" unless defined $pid;
   if ($pid) {
@@ -421,6 +432,10 @@ sub preferred_English_voice () {
   return $preferred_English_voice;
 }
 
+sub start_talking () {
+  $buffered_speech_p = 1;
+}
+
 sub communicate ($) {
   my($s) = @_;
   my @cmd;
@@ -432,6 +447,9 @@ sub communicate ($) {
   if (!$speak_mode_p) {
     log_output $s if $debug;
     printf "%s\n", $s;
+  } elsif ($buffered_speech_p) {
+    $buffered_speech .= '。' if defined $buffered_speech && $buffered_speech !~ /(?:，|。|！|？)$/s;
+    $buffered_speech .= $s;
   } elsif (macos_p && $chinese_p) {
     @cmd = ('say', @opts, '-v', 'Sin-Ji', $s, $pause);
   } elsif (macos_p) {
@@ -449,6 +467,13 @@ sub communicate ($) {
       }
       run_cmd @cmd;
     }
+  }
+}
+
+sub stop_talking () {
+  if ($buffered_speech_p) {
+    $buffered_speech_p = 0;
+    communicate $buffered_speech;
   }
 }
 
@@ -813,7 +838,8 @@ sub enter_infinite_loop () {
 	#(defined $test_data_file? "test-data-file=$test_data_file": ()),
 	sprintf('%sbroadcast', $broadcast_mode_p? '+': '-'),
 	sprintf('%schinese', $chinese_p? '+': '-'),
-	#sprintf('%sdebug', $debug? '+': '-'),
+	sprintf('%sdebug', $debug? '+': '-'),
+	sprintf('%sdry-run', $dry_run_p? '+': '-'),
 	#sprintf('%sgenmon', $genmon_mode? '+': '-'),
 	sprintf('%sloop', $loop_mode_p? '+': '-'),
 	sprintf('%sonce', $once_p? '+': '-'),
@@ -890,10 +916,12 @@ sub enter_infinite_loop () {
       } elsif ($dt < 0 && $speak_mode_p) { # program already started - don't bother announcing
 	;
       } else {
+	start_talking;
 	announce_current_time;
 	display_listing $next_program, $now;
 	communicate($chinese_p? '呢個係今日嘅主要新聞時段': "This is today's main broadcast") if $main_program_p;
 	communicate($chinese_p? '呢個係今日最後一次新聞時段': "This is today's last news broadcast") if $last_news_p;
+	stop_talking;
 	turn_tv_on if $main_program_p || $last_news_p;
     last if $once_p;
       }
@@ -951,6 +979,7 @@ GetOptions(
   'A|all' => sub { $lang = undef },
   'b|broadcast' => \$broadcast_mode_p,
   'd|debug' => sub { $debug += 1 },
+  'dry-run' => \$dry_run_p,
   'province=s' => \$prov,
   'I|data-file=s' => \$test_data_file,
   'g|genmon' => \$genmon_mode,
