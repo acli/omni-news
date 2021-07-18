@@ -792,12 +792,16 @@ sub display_listing ($$) {
       }
     } elsif ($flag == FLAG__UPCOMING_PROGRAM) {
       if ($chinese_p) {
+	$lead .= '跟住係，' if $something_done_p;
 	$lead .= sprintf('%s ', format_channel $channel) unless $all_same_channel_p;
-	$lead .= sprintf('下一個節目係，%s播放，', format_time($time));
+	$lead .= '下一個節目係，' unless $something_done_p;
+	$lead .= sprintf('%s播放，', format_time($time));
 	if (defined $duration && $duration) {
 	  $lead .= sprintf('%s嘅，', format_duration($duration)) unless defined $annotated{$name} && $annotated{$name} == $duration;
 	  $annotated{$name} = $duration;
 	}
+      } elsif ($something_done_p) {
+	$lead .= 'followed by ';
       } else {
 	$lead .= sprintf('Next at %s', format_time $time);
 	$lead .= sprintf(' on %s', format_channel $channel) unless $all_same_channel_p;
@@ -903,6 +907,7 @@ sub enter_infinite_loop () {
 	my $inside_p = $main_start_time <= $det && $det <= $main_end_time;
 	$main_program_p = $inside_p && $t eq RESULT__MAIN_SEGMENT;
 	$last_news_p = $inside_p && $t eq RESULT__LAST_NEWS_BROADCAST;
+	$next_program = $main_program if $main_program_p;
     }
     my $dt = $start_time - $now;
     my $sleep_time;
