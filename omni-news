@@ -126,6 +126,34 @@ use vars qw( %months %dows );
   'Sun' => ['Sunday', '星期日'],
 );
 
+use vars qw( %words );
+%words = (
+  0 => 'zero',
+  1 => 'one',
+  2 => 'two',
+  3 => 'three',
+  4 => 'four',
+  5 => 'five',
+  6 => 'six',
+  7 => 'seven',
+  8 => 'eight',
+  9 => 'nine',
+  10 => 'ten',
+  11 => 'eleven',
+  12 => 'twelve',
+  13 => 'thirteen',
+  14 => 'fourteen',
+  15 => 'fifteen',
+  16 => 'sixteen',
+  17 => 'seventeen',
+  18 => 'eighteen',
+  19 => 'nineteen',
+  20 => 'twenty',
+  30 => 'thirty',
+  40 => 'forty',
+  50 => 'fifty',
+);
+
 use vars qw( %channel_pronunciations );
 %channel_pronunciations = (
   # XXX This is hopeless. The Sin Ji voice cannot pronounce English, but there is no support for English phonemes
@@ -322,6 +350,18 @@ sub adjusted_time () {
   return $t;
 }
 
+sub in_words ($) {
+  my($n) = @_;
+  my $it;
+  if (defined $words{$n}) {
+    $it = $words{$n};
+  } elsif (defined $words{+my $det = 10*int($n/10)}) {
+    $it = sprintf('%s-%s', $words{$det}, $words{+$n%10});
+  }
+  die "Can't put \"$n\" in words" unless defined $it;
+  return $it;
+}
+
 sub format_date ($$$) {
   my($month, $day, $dow) = @_;
   my $fmt = $chinese_p? '%s%s日%s': $speak_mode_p? '%3$s %1$s %2$s': '%3$s, %1$s %2$s';
@@ -358,10 +398,11 @@ sub format_time ($) {
       $it .= sprintf('%s分', $m);
     }
   } else {
-    my($fmt1, $fmt2) = $speak_mode_p? ('[[nmbr NORM]] %s ', '[[nmbr NORM]] %s '): ('%2d:', '%02d');
+    my($fmt1, $fmt2) = $speak_mode_p? (sub { in_words($_[0]) }, sub { in_words($_[0]) }): ('%2d:', '%02d');
     my($am, $pm, $noon, $midnight) = $speak_mode_p? ('a.m.', 'p.m.', 'noon', 'midnight'): ('am', 'pm', 'pm', 'am');
-    $it = sprintf($fmt1, ($hour + 11)%12 + 1);
-    $it .= sprintf($fmt2, $minute) if !$speak_mode_p || $minute;
+    my $display_hour = ($hour + 11)%12 + 1;
+    $it = ref $fmt1? &$fmt1($display_hour) . ' ': sprintf($fmt1, $display_hour);
+    $it .= ref $fmt2? &$fmt2($minute) . ' ': sprintf($fmt2, $minute) if !$speak_mode_p || $minute;
     $it .= ($hour == 0? $midnight: $hour < 12? $am: $hour == 12? $noon: $pm);
   }
   return $it;
@@ -443,7 +484,7 @@ sub communicate ($) {
   # Passing most of these to --bit-rate doesn't actually work; in particular, setting it to 8k will appear to work but produce silence.
   # Default rate seems to be 22050, but explicitly setting it to 22050 will give "Setting bit rate failed: prop"; I hate Apple.
   my @opts = ('--file-format', 'WAVE', '--data-format', 'ulaw', '-o', $temp_file) if $broadcast_mode_p;
-  my $pause = '[[slnc 1000]]';
+  my $pause = '[[slnc 1000]]' if macos_p;
   if (!$speak_mode_p) {
     log_output $s if $debug;
     printf "%s\n", $s;
