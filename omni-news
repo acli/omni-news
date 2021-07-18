@@ -448,7 +448,9 @@ sub communicate ($) {
     log_output $s if $debug;
     printf "%s\n", $s;
   } elsif ($buffered_speech_p) {
-    $buffered_speech .= '。' if defined $buffered_speech && $buffered_speech !~ /(?:，|。|！|？)$/s;
+    $buffered_speech .= '。' if $chinese_p && defined $buffered_speech && $buffered_speech !~ /(?:，|。|！|？)$/s;
+    $buffered_speech .= $s =~ /^[a-z]/? ';': '.' if !$chinese_p && defined $buffered_speech && $buffered_speech !~ /[\.,:;!\?]$/s;
+    $buffered_speech .= ' ' if !$chinese_p && defined $buffered_speech && $buffered_speech !~ /\s$/s;
     $buffered_speech .= $s;
   } elsif (macos_p && $chinese_p) {
     @cmd = ('say', @opts, '-v', 'Sin-Ji', $s, $pause);
