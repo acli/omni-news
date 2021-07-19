@@ -518,6 +518,7 @@ sub stop_talking () {
     $buffered_speech_p = 0;
     communicate $buffered_speech;
   }
+  $buffered_speech = undef;
 }
 
 sub feed_url () {
