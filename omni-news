@@ -15,7 +15,7 @@
 
 # To investigate:
 # https://www.mattmontag.com/personal/mac-os-x-speech-synthesis-markup
-# https://developer.apple.com/documentation/applicationservices/1552235-texttophonemes
+# https://developer.apple.com/documentation/applicationservices/1552235-texttophonemes [API reference, requires Javascript]
 # https://developer.apple.com/documentation/appkit/nsspeechphonemeinfoexample?language=objc
 # https://developer.apple.com/audio/
 # https://developer.apple.com/documentation/avfaudio/avaudiosession/capturing_stereo_audio_from_built-in_microphones
