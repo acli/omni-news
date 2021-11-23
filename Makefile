@@ -6,7 +6,7 @@ else
 bindir=$(HOME)/bin
 endif
 
-install: $($(bindir),$(bin_targets))
+install: $(addprefix $(bindir)/,$(bin_targets))
 
 $(bindir)/%: %
 	perl -cw $< && install -m 755 $< $@
