@@ -1024,7 +1024,7 @@ EOF
 EOF
   print $h <<EOF;
       --province=CODE         Use the province identified by the specified CODE
-  -q, --quiet                 Do not use speech synthesis after midnight
+  -q, --quiet                 Avoid speech synthesis between midnight and 8am
   -s, --speak                 Speak the result instead of displaying it
 EOF
   print $h <<EOF if $debug;
@@ -1033,7 +1033,7 @@ EOF
   print $h <<EOF;
   -v, --verbose               Explain what is being done
   -z, --chinese               Display results in traditional Chinese, or speak
-                              results in Cantonese
+                              results in Cantonese (MacOS only)
       --debug                 Produce lots of debugging output (can be specified
                               more than once for additional verbosity)
       --help                  Display this help and exit
