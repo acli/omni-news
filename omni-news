@@ -98,7 +98,7 @@ use vars qw( %langs );
   'Cantonese' => '廣東話',
   'Filipino' => '菲律賓文',
   'Italian' => '意大利文',
-  'Mandarin' => '國語',
+  'Mandarin' => '華語',
   'Punjabi' => '旁遮普文',
 );
 
@@ -167,8 +167,8 @@ use vars qw( %chinese_program_name );
 %chinese_program_name = (
   'OMNI News: Cantonese Edition' => '粵語新聞',
   'Focus Cantonese' => '都市聚焦',
-  'Showers of Blessings' => '恩雨之聲',
-  'Close to Culture' => '拉近文化', # ??? WTF is this??? [apparently an iCable production]
+  'Showers of Blessings' => '恩雨之聲',	# third-party program (SOBEM)
+  'Close to Culture' => '拉近文化',	# third-party program (iCable)
 );
 
 use vars qw( $lat $lon );
