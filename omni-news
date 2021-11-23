@@ -1012,6 +1012,8 @@ Usage: $0 [OPTION]...
 Figure out when OMNI News Cantonese is being aired by checking the scheduile.
 
   -A, --all                   Match all programs instead of a specific language
+  -b, --broadcast             Generate audio files for speech-synthesized
+                              announcements to work around network latency
   -I, --data-file=FILE        Use test feed data in specified FILE
   -g, --genmon                Terse format suitable as two-line genmon input
   -n, --next                  Display next match instead of all matches
