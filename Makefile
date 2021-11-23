@@ -1,12 +1,18 @@
 bin_targets=omni-news
 
-install: $(addprefix $(HOME)/bin/,$(bin_targets))
+ifeq ($(shell id -u), 0)
+bindir=/usr/local/bin
+else
+bindir=$(HOME)/bin
+endif
 
-$(HOME)/bin/%: %
+install: $($(bindir),$(bin_targets))
+
+$(bindir)/%: %
 	perl -cw $< && install -m 755 $< $@
 
 %.wav: %.mp3
 	mpv $< -o $@ --no-video
 
-.PHONEY: install
+.PHONEY: check install
 .DELETE_ON_ERROR:
