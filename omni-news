@@ -702,7 +702,8 @@ sub find_language_program ($$) {
 	  for my $time (keys %$day_data) {
 	    my $time_data = $day_data->{$time};
 	    if (ref $time_data && (!defined $lang || match_program_language($time_data->{'name'}, $lang))) {
-	      push @found, [$time, $channel, ucfirst lc $data->{$day}->{'dow'}, $day, $data->{$day}->{'month'}, $time_data->{'name'}, $time_data->{'duration'}];
+	      push @found, [$time, $channel, ucfirst lc $data->{$day}->{'dow'}, $day, $data->{$day}->{'month'}, $time_data->{'name'}, $time_data->{'duration'}]
+		  unless $time_data->{'name'} eq 'SIGN OFF';
 	    }
 	  }
 	}
