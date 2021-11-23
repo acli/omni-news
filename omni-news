@@ -880,6 +880,7 @@ sub announce_current_time () {
 }
 
 sub enter_infinite_loop () {
+  select((select(STDERR), $| = 1)[0]); # I don't know why this is needed for STDERR
   $query_next_program_p = 1;
   my $announcement_delta = 300;
   my $expiry_delta = 1;
