@@ -1012,18 +1012,36 @@ Figure out when OMNI News Cantonese is being aired by checking the scheduile.
   -A, --all                   Match all programs instead of a specific language
   -b, --broadcast             Generate audio files for speech-synthesized
                               announcements to work around network latency
+EOF
+  print $h <<EOF if $debug;
   -I, --data-file=FILE        Use test feed data in specified FILE
+EOF
+  print $h <<EOF;
   -n, --next                  Display next match instead of all matches
-      --once                  DEBUGGING ONLY: Exit loop after first annoucement
+EOF
+  print $h <<EOF if $debug;
+      --once                  Exit loop after first annoucement
+EOF
+  print $h <<EOF;
       --province=CODE         Use the province identified by the specified CODE
   -q, --quiet                 Do not use speech synthesis after midnight
   -s, --speak                 Speak the result instead of displaying it
+EOF
+  print $h <<EOF if $debug;
   -W, --what-if=TIMESTAMP     Pretend current time is TIMESTAMP (Unix epoch)
+EOF
+  print $h <<EOF;
   -v, --verbose               Explain what is being done
   -z, --chinese               Display results in traditional Chinese, or speak
                               results in Cantonese
       --debug                 Produce lots of debugging output (can be specified
                               more than once for additional verbosity)
+      --help                  Display this help and exit
+EOF
+  print $h <<EOF unless $debug;
+                              (--debug --help to show debugging options)
+EOF
+  print $h <<EOF;
 
 The codes bc and on are known to exist, but it's not known if they air different
 programs in different provinces.
@@ -1039,7 +1057,7 @@ Getopt::Long::config('bundling');
 GetOptions(
   'A|all' => sub { $lang = undef },
   'b|broadcast' => \$broadcast_mode_p,
-  'd|debug' => sub { $debug += 1 },
+  'd|debug+' => \$debug,
   'dry-run' => \$dry_run_p,
   'province=s' => \$prov,
   'I|data-file=s' => \$test_data_file,
