@@ -1024,7 +1024,8 @@ Figure out when OMNI News Cantonese is being aired by checking the scheduile.
   -w, --sysline               Terse format suitable as a sysline .who file
   -W, --what-if=TIMESTAMP     Pretend current time is TIMESTAMP (Unix epoch)
   -v, --verbose               Explain what is being done
-  -z, --chinese               Display (or speak) results in Chinese
+  -z, --chinese               Display results in traditional Chinese, or speak
+                              results in Cantonese
       --debug                 Produce lots of debugging output (can be specified
                               more than once for additional verbosity)
 
