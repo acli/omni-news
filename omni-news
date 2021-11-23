@@ -1020,7 +1020,7 @@ Figure out when OMNI News Cantonese is being aired by checking the scheduile.
       --once                  DEBUGGING ONLY: Exit loop after first annoucement
       --province=CODE         Use the province identified by the specified CODE
   -q, --quiet                 Do not use speech synthesis after midnight
-      --speak                 Speak the result instead of displaying it
+  -s, --speak                 Speak the result instead of displaying it
   -w, --sysline               Terse format suitable as a sysline .who file
   -W, --what-if=TIMESTAMP     Pretend current time is TIMESTAMP (Unix epoch)
   -v, --verbose               Explain what is being done
