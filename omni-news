@@ -248,12 +248,18 @@ sub run_cmd (\@;$) {
 }
 
 sub turn_tv_on () {
-  my @cmd = ('ssh', '-T', '-l', 'tv-on', 'osmc');
+  my @cmd = ('ssh', '-T', '-l', 'tv-on');
+  my $id = sprintf('%s/.ssh/tvcontrol', $ENV{'HOME'});
+  push @cmd, ('-i', $id) if -f $id;
+  push @cmd, 'osmc';
   return run_cmd @cmd, RUN_CMD__IGNORE_ERRORS;
 }
 
 sub turn_tv_off () {
-  my @cmd = ('ssh', '-T', '-l', 'tv-off', 'osmc');
+  my @cmd = ('ssh', '-T', '-l', 'tv-off');
+  my $id = sprintf('%s/.ssh/tvcontrol', $ENV{'HOME'});
+  push @cmd, ('-i', $id) if -f $id;
+  push @cmd, 'osmc';
   return run_cmd @cmd, RUN_CMD__IGNORE_ERRORS;
 }
 
