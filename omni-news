@@ -128,30 +128,30 @@ use vars qw( %months %dows );
 
 use vars qw( %words );
 %words = (
-  0 => 'zero',
-  1 => 'one',
-  2 => 'two',
-  3 => 'three',
-  4 => 'four',
-  5 => 'five',
-  6 => 'six',
-  7 => 'seven',
-  8 => 'eight',
-  9 => 'nine',
-  10 => 'ten',
-  11 => 'eleven',
-  12 => 'twelve',
-  13 => 'thirteen',
-  14 => 'fourteen',
-  15 => 'fifteen',
-  16 => 'sixteen',
-  17 => 'seventeen',
-  18 => 'eighteen',
-  19 => 'nineteen',
-  20 => 'twenty',
-  30 => 'thirty',
-  40 => 'forty',
-  50 => 'fifty',
+  0 => ['zero', 'zeroeth'],
+  1 => ['one', 'first'],
+  2 => ['two', 'second'],
+  3 => ['three', 'third'],
+  4 => ['four', 'fourth'],
+  5 => ['five', 'fifth'],
+  6 => ['six', 'sixth'],
+  7 => ['seven', 'seventh'],
+  8 => ['eight', 'eighth'],
+  9 => ['nine', 'ninth'],
+  10 => ['ten', 'tenth'],
+  11 => ['eleven', 'eleventh'],
+  12 => ['twelve', 'twelfth'],
+  13 => ['thirteen', 'thirteenth'],
+  14 => ['fourteen', 'fourteenth'],
+  15 => ['fifteen', 'fifteenth'],
+  16 => ['sixteen', 'sixteenth'],
+  17 => ['seventeen', 'seventeenth'],
+  18 => ['eighteen', 'eighteenth'],
+  19 => ['nineteen', 'nineteenth'],
+  20 => ['twenty', 'twentieth'],
+  30 => ['thirty', 'thirtieth'],
+  40 => ['forty', 'fortieth'],
+  50 => ['fifty', 'fiftieth'],
 );
 
 use vars qw( %channel_pronunciations );
@@ -356,13 +356,14 @@ sub adjusted_time () {
   return $t;
 }
 
-sub in_words ($) {
-  my($n) = @_;
+sub in_words ($;$) {
+  my($n, $ordinal_p) = @_;
   my $it;
+  $ordinal_p = 0 if !defined $ordinal_p;
   if (defined $words{$n}) {
-    $it = $words{$n};
+    $it = $words{$n}->[$ordinal_p];
   } elsif (defined $words{+my $det = 10*int($n/10)}) {
-    $it = sprintf('%s-%s', $words{$det}, $words{+$n%10});
+    $it = sprintf('%s-%s', $words{$det}->[0], $words{+$n%10}->[$ordinal_p]);
   }
   die "Can't put \"$n\" in words" unless defined $it;
   return $it;
@@ -371,7 +372,9 @@ sub in_words ($) {
 sub format_date ($$$) {
   my($month, $day, $dow) = @_;
   my $fmt = $chinese_p? '%s%s日%s': $speak_mode_p? '%3$s %1$s %2$s': '%3$s, %1$s %2$s';
-  return sprintf $fmt, $months{$month}->[$chinese_p], $day, $dows{$dow}->[$chinese_p];
+  my $s = sprintf $fmt, $months{$month}->[$chinese_p], $day, $dows{$dow}->[$chinese_p];
+  $s =~ s{(\d+)$}{ 'the ' . in_words($1, 1) }se if !$chinese_p && $speak_mode_p;
+  return $s;
 }
 
 sub format_time ($) {
@@ -880,6 +883,11 @@ sub display_listing ($$) {
   return scalar @$data;
 }
 
+sub announce_current_date () {
+  my($month, $day, $dow) = ($1 + 0, $2 + 0, $3 + 0) if strftime('%m %e %w', localtime adjusted_time) =~ /^(\d+)\s+(\d+)\s+(\d+)/s;
+  communicate sprintf(($chinese_p? '今日係%s': 'Today is %s'), format_date $month, $day, $dow);
+}
+
 sub announce_current_time () {
   communicate sprintf(($chinese_p? '現在係%s': 'It is now %s'), format_time POSIX::strftime('%H:%M', localtime adjusted_time));
 }
@@ -1020,6 +1028,7 @@ Figure out when OMNI News Cantonese is being aired by checking the scheduile.
                               announcements to work around network latency
 EOF
   print $h <<EOF if $debug;
+      --dry-run               Do not execute any external commands
   -I, --data-file=FILE        Use test feed data in specified FILE
 EOF
   print $h <<EOF;
