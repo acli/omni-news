@@ -1016,6 +1016,16 @@ sub enter_infinite_loop () {
   }
 }
 
+$SIG{'TERM'} = sub {
+  log_debug 'OMNI News monitoring shut down' if $debug || $verbose;
+  exit(0);
+};
+$SIG{'INT'} = $SIG{'TERM'};
+$SIG{'HUP'} = $SIG{'TERM'};
+$SIG{'ALRM'} = sub { $debug = 1; };
+$SIG{'STOP'} = sub { $debug = 0; };
+$SIG{'CONT'} = sub {};
+
 sub usage (;$) {
   my($st) = @_; my $h = $st? *STDERR: *STDOUT;
   my $url = feed_url;
