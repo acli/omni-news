@@ -556,7 +556,7 @@ sub get_feed_data (;$) {
     } elsif (defined $force_p && $force_p) {
       log_debug sprintf 'need to get new data because %s', (!ref $force_p && $force_p =~ /\D/s? $force_p: 'we were told to') if $debug || $verbose;
     } else {
-      log_debug 'using cached data' if $debug;
+      log_debug "using cached data in $data_file" if $debug;
       $use_cached_data = 1;
     }
     if (!$use_cached_data) {
@@ -1074,7 +1074,7 @@ GetOptions(
   'b|broadcast' => \$broadcast_mode_p,
   'd|debug+' => \$debug,
   'dry-run' => \$dry_run_p,
-  'province=s' => \$prov,
+  'province=s' => sub { my($key, $val) = @_; $prov = lc $val; },
   'I|data-file=s' => \$test_data_file,
   'loop' => \$loop_mode_p,
   'n|next' => \$query_next_program_p,
@@ -1088,7 +1088,7 @@ GetOptions(
   'help' => \&usage,
 ) || usage(1);
 
-die "$0: \"$prov\" does not look like a valid city code\n" unless $prov =~ /^[a-z]{2}$/;
+die "$0: \"$prov\" does not look like a valid two-letter province code\n" unless $prov =~ /^[a-z]{2}$/;
 $now = adjusted_time;
 
 binmode STDIN, ':utf8';
