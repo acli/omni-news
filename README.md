@@ -3,7 +3,7 @@ A utility to look for Cantonese programs in the official OMNI 2 schedule
 
 This is a small utility script, for my family’s own use,
 that pulls the official TV schedule from OMNI TV’s web site,
-then look for programs that look like they might be Cantonese programs.
+then looks for programs that look like they might be Cantonese programs.
 You can see a list of startup options by running `omni-news --help`.
 
 The script can be run in a `--loop` mode to continually check the downloaded schedule
