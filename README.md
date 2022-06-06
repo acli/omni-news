@@ -26,3 +26,7 @@ it will not find any schedule for that day
 because the TV station has already erased the information for the current week.
 Unfortunately there is nothing that can be done.
 
+The script can be told to speak in Cantonese,
+but Cantonese speech can only be synthesized on MacOS.
+
+A lot of things are hard-coded, including how to turn the TV on.
