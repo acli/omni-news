@@ -1032,6 +1032,7 @@ EOF
   -I, --data-file=FILE        Use test feed data in specified FILE
 EOF
   print $h <<EOF;
+      --loop                  Loop mode (continually announce next program)
   -n, --next                  Display next match instead of all matches
 EOF
   print $h <<EOF if $debug;
@@ -1041,6 +1042,7 @@ EOF
       --province=CODE         Use the province identified by the specified CODE
   -q, --quiet                 Avoid speech synthesis between midnight and 8am
   -s, --speak                 Speak the result instead of displaying it
+  -T, --today                 Display today's schedule
 EOF
   print $h <<EOF if $debug;
   -W, --what-if=TIMESTAMP     Pretend current time is TIMESTAMP (Unix epoch)
