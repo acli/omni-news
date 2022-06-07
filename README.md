@@ -8,7 +8,9 @@ You can see a list of startup options by running `omni-news --help`.
 
 The script can be run in a `--loop` mode to continually check the downloaded schedule
 and `--speak` the main Cantonese news segment that’s coming up
-(if speech synthesis is available) and/or turn the TV on (if possible).
+(if speech synthesis is available,
+it can also be told to stay `--quiet` in the wee hours)
+and/or turn the TV on (if possible).
 The schedule is cached and only downloaded every few days to minimize server load.
 
 Known issues
