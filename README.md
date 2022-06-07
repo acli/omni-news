@@ -6,11 +6,11 @@ to pull the official TV schedule from OMNI TV’s web site
 then look for programs that look like they might be Cantonese programs.
 You can see a list of startup options by running `omni-news --help`.
 
-The script can be run in a `--loop` mode to continually check the downloaded schedule
-and `--speak` the main Cantonese news segment that’s coming up
+The script can be told to run in a `--loop` to continually check the downloaded schedule
+and `--speak` if a Cantonese program is coming up
 (if speech synthesis is available;
 it can also be told to stay `--quiet` in the wee hours)
-and/or turn the TV on (if possible).
+and/or turn the TV on (if possible) if it’s the day’s main programming segment.
 The schedule is cached and only downloaded every few days to minimize server load.
 
 Known issues
