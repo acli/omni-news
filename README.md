@@ -7,7 +7,8 @@ then look for programs that look like Cantonese programs.
 You can see a list of startup options by running `omni-news --help`.
 
 The script can be told to run in a `--loop` to continually check the downloaded schedule
-and `--speak` up if a Cantonese program is coming up
+so that when a Cantonese program is coming up
+it will `--speak` the name of the program
 (if speech synthesis is available;
 it can also be told to stay `--quiet` in the wee hours)
 and/or turn the TV on (if possible) if it’s the day’s main programming segment.
