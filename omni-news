@@ -547,13 +547,21 @@ sub stop_talking () {
 }
 
 sub feed_url () {
-  return "https://www.omnitv.ca/$prov/yue-can/schedule/";
+  # The new schedule can have region=prairies, pacific or eastern, but there's no distinction between OMNI 1 and 2.
+  # Cantonese programs appear only on the pacific schedule; "eastern" seems to mean OMNI 1
+  return $prov eq 'BC'? 'https://int-new.omnitv.ca/tv-schedule/?region=pacific';
 }
 
 sub get_feed_data (;$) {
   my($force_p) = @_;
   my $data_file;
   my $basename = "$prov.html";
+  state $last_attempted_time;
+  my $min_attempt_delay = 600;
+  if (defined $last_attempted_time && time - $last_attempted_time < $min_attempt_delay) {	# don't hammer the server
+    log_debug "forcing delay of $min_attempt_delay seconds";
+    sleep $min_attempt_delay;
+  }
   if (defined $test_data_file) {
     $data_file = $test_data_file;
     log_debug "using test data from \"$data_file\"" if $debug || $verbose;
@@ -577,6 +585,7 @@ sub get_feed_data (;$) {
     }
     if (!$use_cached_data) {
       my @cmd = ('wget', '-q', '-O', $data_file, feed_url);
+      $last_attempted_time = time unless $force_p;
       show_cmd @cmd;
       my $pid = fork;
       die "$0: get_feed_data: $cmd[0]: fork: $!\n" unless defined $pid;
@@ -946,7 +955,7 @@ sub enter_infinite_loop () {
       state $last_retry_time;
       my $previous_end_time = $end_time;
       $data = get_feed_data;
-      my $full_listing = find_language_program $data, $reporting_origin;
+      my $full_listing = find_language_program $data, $reporting_origin if defined $data;
       if (!$full_listing || !@$full_listing) { # If we have zero results something is probably wrong. Force a retry but don't overload the server
 	if (!defined $last_retry_time || $now - $last_retry_time >= 3600) {
 	  $data = get_feed_data 'cached data failed sanity check';
