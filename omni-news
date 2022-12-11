@@ -158,13 +158,13 @@ use vars qw( %months %dows );
   'Dec' => ['December', '十二月'],
 );
 %dows = (
-  'Mon' => ['Monday', '星期一'],
-  'Tue' => ['Tuesday', '星期二'],
-  'Wed' => ['Wednesday', '星期三'],
-  'Thu' => ['Thursday', '星期四'],
-  'Fri' => ['Friday', '星期五'],
-  'Sat' => ['Saturday', '星期六'],
-  'Sun' => ['Sunday', '星期日'],
+  'Monday' => ['Monday', '星期一'],
+  'Tuesday' => ['Tuesday', '星期二'],
+  'Wednesday' => ['Wednesday', '星期三'],
+  'Thursday' => ['Thursday', '星期四'],
+  'Friday' => ['Friday', '星期五'],
+  'Saturday' => ['Saturday', '星期六'],
+  'Sunday' => ['Sunday', '星期日'],
 );
 
 use vars qw( %words );
@@ -717,11 +717,15 @@ sub get_feed_data (;$) {
       }
     } elsif ($state eq STATE__DURATION) {
       if ($s =~ /^\s*<p class="duration[^""]*">(\d+) minutes/s) {
+	my $day = $regs->{'current-day'};
 	my $duration = $1;
 	log_debug "duration is $duration" if $debug > 1;
-	$it->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'name'} = $regs->{'current-name'};
-	$it->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'lang'} = $regs->{'current-lang'};
-	$it->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'duration'} = $duration;
+	$it->{$day}->{$regs->{'current-time'}}->{'name'} = $regs->{'current-name'};
+	$it->{$day}->{$regs->{'current-time'}}->{'lang'} = $regs->{'current-lang'};
+	$it->{$day}->{$regs->{'current-time'}}->{'duration'} = $duration;
+	$it->{$day}->{'dow'} = $regs->{$day}->{'dow'};
+	$it->{$day}->{'day'} = $regs->{$day}->{'day'};
+	$it->{$day}->{'month'} = $regs->{$day}->{'month'};
 	delete $regs->{'current-time'};
 	delete $regs->{'current-name'};
 	delete $regs->{'current-lang'};
@@ -768,7 +772,7 @@ sub find_language_program ($$) {
 	  for my $time (keys %$day_data) {
 	    my $time_data = $day_data->{$time};
 	    if (ref $time_data && (!defined $lang || match_program_language($time_data, $lang))) {
-	      push @found, [$time, $channel, ucfirst lc $data->{$day}->{'dow'}, $day, $data->{$day}->{'month'}, $time_data->{'name'}, $time_data->{'duration'}]
+	      push @found, [$time, $channel, ucfirst lc $day_data->{'dow'}, $day, $day_data->{'month'}, $time_data->{'name'}, $time_data->{'duration'}]
 		  unless $time_data->{'name'} eq 'SIGN OFF';
 	    }
 	  }
