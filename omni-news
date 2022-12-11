@@ -69,7 +69,7 @@ use vars qw( $broadcast_mode_p );
 use vars qw( $quiet_p );
 use vars qw( $buffered_speech_p $buffered_speech );
 use vars qw( $preferred_English_voice );
-$lang = 'Cantonese';
+$lang = 'CAN';
 $prov = 'on';
 
 use vars qw( $data_dir $temp_file $esd_server $pa_server $pa_sink );
@@ -82,23 +82,63 @@ use vars qw( $max_staleness );
 $max_staleness = 3*86400; # 3 days - the published schedule spans 2 weeks so in theory this number can be even bigger but just in case
 
 sub STATE__INITIAL   () { 'INITIAL' }
-sub STATE__CHANNEL   () { 'CHANNEL' }
 sub STATE__DAYS      () { 'DAYS' }
 sub STATE__DAY       () { 'DAY' }
-sub STATE__TIMES     () { 'TIMES' }
+sub STATE__DURATION  () { 'DURATION' }
 sub STATE__SCHEDULE  () { 'SCHEDULE' }
 sub STATE__SHOW_NAME () { 'SHOW_NAME' }
 sub STATE__LIMINAL   () { 'LIMINAL' }
 sub STATE__FOOTER    () { 'FOOTER' }
 
+# New schedule is language tagged using strange OMNI codes (not ISO 639, not BCP):
+# ARA = Arabic
+# BEN = Bengali
+# CAN = Cantonese
+# ENG = English
+# EST = Estonian
+# KOR = Korean
+# MAA = Mandarin
+# PAN = Punjabi
+# PER = Persian
+# SNM = Sinhala? (Sri Lanka)
+# SOM = Somalian?
+# TAG = Tagalog
+# TUR = Turkish
+# VIE = Vietnamese
 use vars qw( %langs );
 %langs = (
-  'Arabic' => '阿拉伯文',
-  'Cantonese' => '廣東話',
-  'Filipino' => '菲律賓文',
-  'Italian' => '意大利文',
-  'Mandarin' => '華語',
-  'Punjabi' => '旁遮普文',
+  #'AKA' => { 'en' => 'Ghanian', 'zh' => '加納文' },		# ?
+  'ARA' => { 'en' => 'Arabic', 'zh' => '阿拉伯文' },
+  'ARM' => { 'en' => 'Armenian', 'zh' => '亞美尼亞文' },
+  'CAN' => { 'en' => 'Cantonese', 'zh' => '廣東話' },
+  #'CPE' => { 'en' => '???', 'zh' => '???' },			# "Phina"?
+  #'CPF' => { 'en' => '???', 'zh' => '???' },			# African French?
+  'CZE' => { 'en' => 'Czech', 'zh' => '捷克文' },
+  'EST' => { 'en' => 'Estonian', 'zh' => '愛沙尼亞文' },
+  'GRE' => { 'en' => 'Greek', 'zh' => '希臘文' },
+  'HUN' => { 'en' => 'Hungarian', 'zh' => '匈牙利文' },
+  'ITA' => { 'en' => 'Italian', 'zh' => '意大利文' },
+  'JPN' => { 'en' => 'Japanese', 'zh' => '日文' },
+  'KOR' => { 'en' => 'Korean', 'zh' => '韓文' },
+  'MAA' => { 'en' => 'Mandarin', 'zh' => '北方話' },
+  'MAC' => { 'en' => 'Macedonian', 'zh' => '北馬其頓文' },
+  'MLT' => { 'en' => 'Maltese', 'zh' => '馬爾他文' },
+  'PAN' => { 'en' => 'Punjabi', 'zh' => '旁遮普文' },
+  'PER' => { 'en' => 'Persian', 'zh' => '波斯文' },
+  'POR' => { 'en' => 'Portuguese', 'zh' => '萄文' },
+  'RUM' => { 'en' => 'Romanian', 'zh' => '羅馬尼亞文' },
+  'RUS' => { 'en' => 'Russian', 'zh' => '俄文' },
+  'SCC' => { 'en' => 'Serbo-Croatian', 'zh' => '塞爾維亞-克羅地亞文' },	# wtf... that's why they should've used ISO codes
+  'SNH' => { 'en' => 'Sinhala', 'zh' => '僧伽羅文' },
+  'SLO' => { 'en' => 'Slovenian', 'zh' => '斯洛文尼亞文' },
+  'SOM' => { 'en' => 'Somalian', 'zh' => '索馬里文' },
+  'SPA' => { 'en' => 'Spanish', 'zh' => '西班牙文' },
+  'TAG' => { 'en' => 'Filipino', 'zh' => '菲律賓文' },
+  #'TEL' => { 'en' => 'Telegu', 'zh' => '???' },
+  'TUR' => { 'en' => 'Turkish', 'zh' => '土耳其文' },
+  'UKR' => { 'en' => 'Ukrainian', 'zh' => '烏克蘭文' },
+  'URD' => { 'en' => 'Urdu', 'zh' => '烏爾j都文' },
+  #'YOR' => { 'en' => '???', 'zh' => '???' },
 );
 
 use vars qw( %months %dows );
@@ -547,9 +587,15 @@ sub stop_talking () {
 }
 
 sub feed_url () {
-  # The new schedule can have region=prairies, pacific or eastern, but there's no distinction between OMNI 1 and 2.
-  # Cantonese programs appear only on the pacific schedule; "eastern" seems to mean OMNI 1
-  return $prov eq 'BC'? 'https://int-new.omnitv.ca/tv-schedule/?region=pacific';
+  # New schedule:
+  # OMNI 1: https://www.omnitv.ca/tv-schedule/?region=omni1
+  # OMNI 2 Eastern: https://www.omnitv.ca/tv-schedule/?region=eastern
+  # OMNI 2 Pacific: https://www.omnitv.ca/tv-schedule/?region=pacific
+  # OMNI 2 Prairies: https://www.omnitv.ca/tv-schedule/?region=prairies
+  return $prov =~ /(?:bc)/i? 'https://int-new.omnitv.ca/tv-schedule/?region=pacific':
+	 $prov =~ /(?:on)/i? 'https://www.omnitv.ca/tv-schedule/?region=eastern':
+	 $prov =~ /(?:ab)/i? 'https://www.omnitv.ca/tv-schedule/?region=prairies':
+	 'https://www.omnitv.ca/tv-schedule/?region=omni1';
 }
 
 sub get_feed_data (;$) {
@@ -604,100 +650,78 @@ sub get_feed_data (;$) {
     my $s = @readahead? pop @readahead: scalar <INPUT>;
   last unless defined $s;
     chomp $s;
+    $s =~ s/^\s+//s;
     log_debug "state $state" if $debug > 2;
     log_input $s if $debug > 2;
+    $s =~ s/\&#039;/’/g;
     $s =~ s/\&(?:#xB0|deg);/°/g;
     $s =~ s/\b([Ii])nt'l\b/\1nternational/g;
     my $debug__orig_state = $state;
     if ($state eq STATE__INITIAL || $state eq STATE__LIMINAL) {
-      if ($s =~ /^\s*<div.*data-(channel)="(.*?)">\s*$/) {
+      if ($s =~ /^\s*<h4>(.*?)<\/h4>/s) {
 	$regs->{'current-channel'} = $2;
-	$state = STATE__CHANNEL;
+	$state = STATE__SCHEDULE;
 	$node = {};
 	$i += 1;
+      } elsif ($s =~ /^\s*<a id="(havas-tab-\d)" data-mdb-toggle="tab"/s) {
+	log_debug "current id is $1" if $debug > 1;
+	$regs->{'current-id'} = $1;
+      } elsif ($s =~ /^\s*<span class="havas-schedule-wd[^""]*">(\w+)<\/span>/s) {
+	log_debug "current dow is $1" if $debug > 1;
+	$regs->{'current-dow'} = $1;
+      } elsif ($s =~ /^\s*<span class="havas-schedule-date[^""]*">(\w{3})\s+(\d+)<\/span>/s) {
+	log_debug "got month=$1, day=$2" if $debug > 1;
+	$regs->{$regs->{'current-id'}} = $2;
+	$regs->{$2}->{'month'} = $1;
+	$regs->{$2}->{'day'} = $2;
+	$regs->{$2}->{'dow'} = $regs->{'current-dow'};
+	delete $regs->{'current-id'};
+	delete $regs->{'current-dow'};
       }
-    } elsif ($state eq STATE__CHANNEL) {
-      if ($s =~ /^\s*<div.*data-(channel)="(.*?)">\s*$/) {
-	die "STATE__$state encountered unexpected data-channel div, this is a bug.\n";
-      } elsif ($s =~ /^\s*<div class="day-picker-view">\s*$/) {
-	$state = STATE__DAYS;
-      }
-    } elsif ($state eq STATE__DAYS) {
-      if ($s =~ /^\s*<div.*data-(channel)="(.*?)">\s*$/) {
-	die "STATE__$state encountered unexpected data-channel div, this is a bug.\n";
-      } elsif ($s =~ /^\s*<span.*?data-date="day-(\d+)".*?>\s*$/) {
-	$regs->{'current-day'} = $1 + 0;
+    } elsif ($state eq STATE__SCHEDULE) {
+      if ($s =~ /^\s*<div .*?aria-labelledby="(havas-tab-\d+)"/s) {
+	my $day = $regs->{$regs->{$1}};
+	log_debug 'regs = ' . Dumper $regs if $debug > 1;
+	$day = $day->{'day'};
+	log_debug "got id=$1 => new current day is $day" if $debug > 1;
+	$regs->{'current-day'} = $day;
 	$state = STATE__DAY;
       }
     } elsif ($state eq STATE__DAY) {
-      if ($s =~ /^\s*<div.*data-(channel)="(.*?)">\s*$/) {
-	die "STATE__$state encountered unexpected data-channel div, this is a bug.\n";
-      } elsif ($s =~ /^\s*<span class="day-name\b.*?">(\w+)<\/span>\s*$/) {
-	$regs->{$regs->{'current-day'}}->{'dow'} = $1;
-      } elsif ($s =~ /^\s*<span class="date">(\w+) (\d+)<\/span>\s*$/) {
-	die sprintf("%s: Expecting day %s but got %s\n", $s, $regs->{'current-day'}, $2) unless $2 == $regs->{'current-day'};
-	$it->{$regs->{'current-day'}}->{'month'} = $1;
-	$it->{$regs->{'current-day'}}->{'dow'} = $regs->{$regs->{'current-day'}}->{'dow'};
-      } elsif ($s =~ /^\s*<span.*?data-date="day-(\d+)".*?>\s*$/) {
-	$regs->{'current-day'} = $1 + 0;
-      } elsif ($s =~ /^\s*<div class="time-row">\s*$/) {
-	delete $regs->{'current-day'};
-	$regs->{'times'} = [];
-	$state = STATE__TIMES;
-      }
-    } elsif ($state eq STATE__TIMES) {
-      if ($s =~ /^\s*<div.*data-(channel)="(.*?)">\s*$/) {
-	die "STATE__$state encountered unexpected data-channel div, this is a bug.\n";
-      } elsif ($s =~ /^\s*<span .*?data-timeslot="(\d\d:\d\d)">\s*$/) {
-	$regs->{$1} = @{$regs->{'times'}};
-	push @{$regs->{'times'}}, $1;
-      } elsif ($s =~ /^\s*<div class="schedule-data day(\d+)">\s*$/) {
-	$regs->{'current-day'} = $1 + 0;
-	$state = STATE__SCHEDULE;
-	log_debug sprintf '%s schedule for day %s', $regs->{'current-channel'}, $1 if $debug > 1;
-      }
-    } elsif ($state eq STATE__SCHEDULE || $state eq STATE__SHOW_NAME) {
-      if ($s =~ /^\s*<div.*data-(channel)="(.*?)">\s*$/) {
-	die "STATE__$state encountered unexpected data-channel div, this is a bug.\n";
-      } elsif ($s =~ /^\s*<div class="schedule-data day(\d+)">\s*$/) {
-	push @readahead, $s;
-	$state = STATE__TIMES;
-      } elsif ($s =~ /<span class=".*?duration(\d+).*?" data-timeslot="(\d\d:\d\d)">/) {
-	$regs->{'current-time'} = $2;
-	$node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'duration'} = $1 + 0;
-      } elsif ($s =~ /<span class="show-name">(.+)/) {
+      if ($s =~ /^\s*([12]?\d):(\d\d)\s*([AP]M)\b/s) {
+	my($h, $m, $moity) = ($1 + 0, $2 + 0, $3);
+	$h -= 12 if $h == 12;
+	$h += 12 if $moity eq 'PM';
+	my $time = sprintf('%02d:%02d', $h, $m);
+	log_debug "time is $time" if $debug > 1;
+	$regs->{'current-time'} = $time;
+	push @{$regs->{'times'}}, $time;
+      } elsif ($s =~ /^\s*<span class="language-tag[^""]*">\s*(\w{3})\s*<\/span>/s) {
+	log_debug "lang is $1" if $debug > 1;
+	$regs->{'current-lang'} = $1;
+      } elsif ($s =~ /^\s*<h3/s) {
 	$state = STATE__SHOW_NAME;
-	push @readahead, $1;
-      } elsif ($s =~ /<!--\s*schedule-view\s*-end\s*-->\s*$/) {
-	$it->{$regs->{'current-channel'}} = $node;
-	$state = STATE__LIMINAL;
-      } elsif ($s =~ /^\s*<footer.*?>\s*$/) {
-	push @{$it->{'data'}}, $node;
-	$state = STATE__FOOTER;
-      } elsif ($s =~ /^\s*<span class="(?:ratings|more)">\s*$/) { # this should happen only if state eq STATE__SHOW_NAME
+      } elsif ($s =~ /^\s*<div .*?aria-labelledby="(havas-tab-\d+)"/s) {
+	push @readahead, $s;
 	$state = STATE__SCHEDULE;
-      } elsif ($s =~ /^\s*<span class="on-now">\s*(.*?)\s+\((\w+)\)\s+(\d+):(\d\d)\s*-\s*(\d+):(\d\d)\s*([AP]M)\s+(\S+?)<\/span>\s*$/) {
-	my($chk_name, $chk_rating, $chk_start_h, $chk_start_m, $chk_end_h, $chk_end_m, $chk_moity, $chk_tz) = ($1, $2, $3, $4, $5, $6, $8, $8);
-	my $expected_name = $node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'name'};
-	if ($chk_name eq $expected_name) {
-	  $node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'rating'} = $chk_rating;
-	  if ($node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'duration'} == 0) {
-	    my $corrected_duration = (60*$chk_end_h + $chk_end_m) - (60*$chk_start_h + $chk_start_m);
-	    $node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'duration'} = $corrected_duration;
-	    log_debug sprintf 'on-now record suggests correct duration for %s is %d', $chk_name, $corrected_duration if $debug;
-	  }
-	} else {
-	  log_debug sprintf 'discarding on-now: expecting %s but found %s', $expected_name, $chk_name if $debug || $verbose;
-	}
-      } elsif ($state eq STATE__SHOW_NAME) {
-	$node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'url'} = $1 if $s =~ /<a\b.*?href="([^""]+)"/;
-	$s =~ s/<[^<>]*>//sg;
-	$s =~ s/^\s+//sg;
-	$s =~ s/\s+$//sg;
-	if ($s =~ /\S/s) {
-	  $node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'name'} .= ' ' if defined $node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'name'};
-	  $node->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'name'} .= $s;
-	}
+      }
+    } elsif ($state eq STATE__SHOW_NAME) {
+      if ($s =~ /^\s*((?!\s)(?!<)(?:(?!<\/h3>).)*(?<=\S))\s*<\/h3>$/s) {
+	log_debug "show name is $1" if $debug > 1;
+	$regs->{'current-name'} = $1;
+	$state = STATE__DURATION;
+      }
+    } elsif ($state eq STATE__DURATION) {
+      if ($s =~ /^\s*<p class="duration[^""]*">(\d+) minutes/s) {
+	my $duration = $1;
+	log_debug "duration is $duration" if $debug > 1;
+	$it->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'name'} = $regs->{'current-name'};
+	$it->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'lang'} = $regs->{'current-lang'};
+	$it->{$regs->{'current-day'}}->{$regs->{'current-time'}}->{'duration'} = $duration;
+	delete $regs->{'current-time'};
+	delete $regs->{'current-name'};
+	delete $regs->{'current-lang'};
+	$state = STATE__DAY;
       }
     } else {
       die "$0: Internal error: Reached unknown state \"$state\"\n";
@@ -707,6 +731,8 @@ sub get_feed_data (;$) {
   }
   log_debug 'end of feed reached' if $debug;
   close INPUT;
+  $it = {$regs->{'current-channel'} => $it} if $it;
+  log_debug 'GOT HERE '.Dumper $it if $debug > 2;#XXXZZZ
   return $it;
 }
 
@@ -718,7 +744,7 @@ sub news_program_p ($) {
 sub match_program_language ($$) {
   my($name, $language) = @_;
   my $it = defined $language && $language =~ /\S/ && $name =~ /$language/;
-  $it = 1 if $language eq 'Cantonese' && defined $chinese_program_name{$name};
+  $it = 1 if $language eq 'CAN' && defined $chinese_program_name{$name};
   return $it;
 }
 
