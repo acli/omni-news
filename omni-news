@@ -129,7 +129,7 @@ use vars qw( %langs );
   'POR' => { 'en' => 'Portuguese', 'zh' => '萄文' },
   'RUM' => { 'en' => 'Romanian', 'zh' => '羅馬尼亞文' },
   'RUS' => { 'en' => 'Russian', 'zh' => '俄文' },
-  'SCC' => { 'en' => 'Serbo-Croatian', 'zh' => '塞爾維亞-克羅地亞文' },	# wtf... that's why they should've used ISO codes
+  'SCC' => { 'en' => 'Serbo-Croatian', 'zh' => '塞爾維亞-克羅地亞文' },
   'SNH' => { 'en' => 'Sinhala', 'zh' => '僧伽羅文' },
   'SLO' => { 'en' => 'Slovenian', 'zh' => '斯洛文尼亞文' },
   'SOM' => { 'en' => 'Somalian', 'zh' => '索馬里文' },
@@ -493,7 +493,7 @@ sub format_channel ($) {
 
 sub format_language ($) {
   my($lang) = @_;
-  return $chinese_p && defined $lang && $langs{$lang}? $langs{$lang}: $lang;
+  return defined $langs{$lang}? $langs{$lang}->{+$chinese_p? 'zh': 'en'}: $lang;
 }
 
 sub calculate_real_time ($;$) {
@@ -660,7 +660,8 @@ sub get_feed_data (;$) {
     my $debug__orig_state = $state;
     if ($state eq STATE__INITIAL || $state eq STATE__LIMINAL) {
       if ($s =~ /^\s*<h4>(.*?)<\/h4>/s) {
-	$regs->{'current-channel'} = $2;
+	log_debug "current channel is $1" if $debug > 1;
+	$regs->{'current-channel'} = $1;
 	$state = STATE__SCHEDULE;
 	$node = {};
 	$i += 1;
@@ -678,6 +679,8 @@ sub get_feed_data (;$) {
 	$regs->{$2}->{'dow'} = $regs->{'current-dow'};
 	delete $regs->{'current-id'};
 	delete $regs->{'current-dow'};
+      } elsif ($s =~ /^\s*<meta property="article:modified_time" content="(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})+(\d{2}):(\d{2})" \/>/s) {
+	$regs->{$2}->{'base-year'} = $1;
       }
     } elsif ($state eq STATE__SCHEDULE) {
       if ($s =~ /^\s*<div .*?aria-labelledby="(havas-tab-\d+)"/s) {
@@ -732,7 +735,7 @@ sub get_feed_data (;$) {
   }
   log_debug 'end of feed reached' if $debug;
   close INPUT;
-  $it = {$regs->{'current-channel'} => $it} if $it;
+  $it = {+$regs->{'current-channel'} => $it} if $it;
   log_debug 'GOT HERE '.Dumper $it if $debug > 2;#XXXZZZ
   return $it;
 }
@@ -743,9 +746,8 @@ sub news_program_p ($) {
 }
 
 sub match_program_language ($$) {
-  my($name, $language) = @_;
-  my $it = defined $language && $language =~ /\S/ && $name =~ /$language/;
-  $it = 1 if $language eq 'CAN' && defined $chinese_program_name{$name};
+  my($node, $language) = @_;
+  my $it = defined $language && $language =~ /\S/ && $node->{'lang'} =~ /^$language$/i;
   return $it;
 }
 
@@ -765,7 +767,7 @@ sub find_language_program ($$) {
 	if ($day == $target_day && ref $day_data) {
 	  for my $time (keys %$day_data) {
 	    my $time_data = $day_data->{$time};
-	    if (ref $time_data && (!defined $lang || match_program_language($time_data->{'name'}, $lang))) {
+	    if (ref $time_data && (!defined $lang || match_program_language($time_data, $lang))) {
 	      push @found, [$time, $channel, ucfirst lc $data->{$day}->{'dow'}, $day, $data->{$day}->{'month'}, $time_data->{'name'}, $time_data->{'duration'}]
 		  unless $time_data->{'name'} eq 'SIGN OFF';
 	    }
@@ -886,7 +888,7 @@ sub display_listing ($$) {
       } else {
 	if (!$something_done_p) {
 	  $lead .= sprintf('%s for ', ($type eq RESULT__MAIN_SEGMENT? 'Main segment': $type eq RESULT__LAST_NEWS_BROADCAST? 'Last news broadcast': 'Schedule'));
-	  $lead .= sprintf('%s programs on ', $lang) if defined $lang;
+	  $lead .= sprintf('%s programs on ', format_language($lang)) if defined $lang;
 	  $lead .= format_date($month, $day, $dow);
 	  $lead .= sprintf(' on %s', format_channel $channel) if $all_same_channel_p;
 	  $lead .= ":\n";
