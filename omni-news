@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 # vi:set sw=2 ai sm:
 #
-# Copyright 2021 by Ambrose Li <ambrose.li@gmail.com>
+# Copyright 2021, 2022 by Ambrose Li <ambrose.li@gmail.com>
 # Pull program schedule from OMNI TV's site to try to figure out when news is aired
 # because the time can shift around or news for the day can get cancelled for hockey
 #
@@ -22,6 +22,7 @@
 # https://stackoverflow.com/questions/37529/simple-audio-input-api-on-a-mac
 # -> http://www.portaudio.com/
 # -> https://github.com/PortAudio/portaudio
+# https://github.com/espeak-ng/espeak-ng/
 
 # Historical knowledge only:
 # https://github.com/zonque/PulseAudioOSX
@@ -626,7 +627,7 @@ sub get_feed_data (;$) {
     } elsif (defined $force_p && $force_p) {
       log_debug sprintf 'need to get new data because %s', (!ref $force_p && $force_p =~ /\D/s? $force_p: 'we were told to') if $debug || $verbose;
     } else {
-      log_debug 'using cached data' if $debug;
+      log_debug "using cached data in $data_file" if $debug;
       $use_cached_data = 1;
     }
     if (!$use_cached_data) {
@@ -1093,6 +1094,7 @@ EOF
   -I, --data-file=FILE        Use test feed data in specified FILE
 EOF
   print $h <<EOF;
+      --loop                  Loop mode (continually announce next program)
   -n, --next                  Display next match instead of all matches
 EOF
   print $h <<EOF if $debug;
@@ -1102,6 +1104,7 @@ EOF
       --province=CODE         Use the province identified by the specified CODE
   -q, --quiet                 Avoid speech synthesis between midnight and 8am
   -s, --speak                 Speak the result instead of displaying it
+  -T, --today                 Display today's schedule
 EOF
   print $h <<EOF if $debug;
   -W, --what-if=TIMESTAMP     Pretend current time is TIMESTAMP (Unix epoch)
@@ -1135,7 +1138,7 @@ GetOptions(
   'b|broadcast' => \$broadcast_mode_p,
   'd|debug+' => \$debug,
   'dry-run' => \$dry_run_p,
-  'province=s' => \$prov,
+  'province=s' => sub { my($key, $val) = @_; $prov = lc $val; },
   'I|data-file=s' => \$test_data_file,
   'loop' => \$loop_mode_p,
   'n|next' => \$query_next_program_p,
@@ -1149,7 +1152,7 @@ GetOptions(
   'help' => \&usage,
 ) || usage(1);
 
-die "$0: \"$prov\" does not look like a valid city code\n" unless $prov =~ /^[a-z]{2}$/;
+die "$0: \"$prov\" does not look like a valid two-letter province code\n" unless $prov =~ /^[a-z]{2}$/;
 $now = adjusted_time;
 
 binmode STDIN, ':utf8';
