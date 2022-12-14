@@ -673,9 +673,9 @@ sub get_feed_data (;$) {
 	$regs->{'current-dow'} = $1;
       } elsif ($s =~ /^\s*<span class="havas-schedule-date[^""]*">(\w{3})\s+(\d+)<\/span>/s) {
 	log_debug "got month=$1, day=$2" if $debug > 1;
-	$regs->{$regs->{'current-id'}} = $2;
+	$regs->{'id'}->{$regs->{'current-id'}} = $2;
 	$regs->{$2}->{'month'} = $1;
-	$regs->{$2}->{'day'} = $2;
+	$regs->{$2}->{'day'} = $2 + 0;
 	$regs->{$2}->{'dow'} = $regs->{'current-dow'};
 	delete $regs->{'current-id'};
 	delete $regs->{'current-dow'};
@@ -684,7 +684,7 @@ sub get_feed_data (;$) {
       }
     } elsif ($state eq STATE__SCHEDULE) {
       if ($s =~ /^\s*<div .*?aria-labelledby="(havas-tab-\d+)"/s) {
-	my $day = $regs->{$regs->{$1}};
+	my $day = $regs->{$regs->{'id'}->{$1}};
 	log_debug 'regs = ' . Dumper $regs if $debug > 1;
 	$day = $day->{'day'};
 	log_debug "got id=$1 => new current day is $day" if $debug > 1;
