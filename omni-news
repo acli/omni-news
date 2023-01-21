@@ -1051,8 +1051,11 @@ sub enter_infinite_loop () {
 	start_talking;
 	announce_current_time;
 	display_listing $next_program, $now;
-	communicate($chinese_p? '呢個係今日嘅主要新聞時段': "This is today's main broadcast") if $main_program_p;
-	communicate($chinese_p? '呢個係今日最後一次新聞時段': "This is today's last news broadcast") if $last_news_p;
+	if ($main_program_p) {
+	  communicate($chinese_p? '呢個係今日嘅主要新聞時段': "This is today's main broadcast");
+	} elsif ($last_news_p) {
+	  communicate($chinese_p? '呢個係今日最後一次新聞時段': "This is today's last news broadcast");
+	}
 	stop_talking;
 	turn_tv_on if $main_program_p || $last_news_p;
     last if $once_p;
@@ -1064,7 +1067,6 @@ sub enter_infinite_loop () {
     } else {
       $sleep_time = $dt/2;
       $sleep_time = 1 if $sleep_time < 1;
-      log_debug "GOT HERE $sleep_time";
     }
     # always force at least a 1-second sleep
     $sleep_time = 1  if !defined $sleep_time || $sleep_time < 1;
