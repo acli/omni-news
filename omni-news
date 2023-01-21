@@ -1071,6 +1071,7 @@ sub enter_infinite_loop () {
     # always force at least a 1-second sleep
     $sleep_time = 1  if !defined $sleep_time || $sleep_time < 1;
     log_debug "sleep $sleep_time" if $debug;
+    sleep $sleep_time;
   }
 }
 
