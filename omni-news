@@ -82,6 +82,9 @@ $temp_file = "$data_dir/temp.wav";
 use vars qw( $max_staleness );
 $max_staleness = 3*86400; # 3 days - the published schedule spans 2 weeks so in theory this number can be even bigger but just in case
 
+use vars qw( $max_sleep );
+$max_sleep = 3600; # 30 minutes
+
 sub STATE__INITIAL   () { 'INITIAL' }
 sub STATE__DAYS      () { 'DAYS' }
 sub STATE__DAY       () { 'DAY' }
@@ -514,26 +517,31 @@ sub macos_p () {
 
 sub preferred_English_voice () {
   if (!defined $preferred_English_voice) {
-    my %voices;
-    my @cmd = ('say', '-v', '?');
-    show_cmd @cmd;
+    if (macos_p) {
+      my %voices;
+      my @cmd = ('say', '-v', '?');
+      show_cmd @cmd;
 
-    my $h = open(INPUT, '-|');
-    die "$0: $cmd[0]: fork: $!\n" unless defined $h;
-    if ($h) {
-      for (;;) {
-	my $s = scalar <INPUT>;
-      last unless defined $s;
-	$voices{$1} = $2 if $s =~ /^(.*?\S)\s+([a-z]{2}[-_](?:[A-Z][A-Z]|[a-z]+))\s+#/s;
+      my $h = open(INPUT, '-|');
+      die "$0: $cmd[0]: fork: $!\n" unless defined $h;
+      if ($h) {
+	for (;;) {
+	  my $s = scalar <INPUT>;
+	last unless defined $s;
+	  $voices{$1} = $2 if $s =~ /^(.*?\S)\s+([a-z]{2}[-_](?:[A-Z][A-Z]|[a-z]+))\s+#/s;
+	}
+	close INPUT;
+      } else {
+	exec {$cmd[0]} @cmd;
+	die "$0: $cmd[0]: exec: $!\n";
       }
-      close INPUT;
+      for my $pref (('Fiona', 'Emily', 'Karen', 'Samantha')) {
+	$preferred_English_voice = $pref if defined $voices{$pref};
+      last if defined $preferred_English_voice;
+      }
     } else {
-      exec {$cmd[0]} @cmd;
-      die "$0: $cmd[0]: exec: $!\n";
-    }
-    for my $pref (('Fiona', 'Emily', 'Karen', 'Samantha')) {
-      $preferred_English_voice = $pref if defined $voices{$pref};
-    last if defined $preferred_English_voice;
+      # XXX stupid hack
+      $preferred_English_voice = -f '/usr/share/mbrola/us1'? 'mb-us1': 'en';
     }
   }
   return $preferred_English_voice;
@@ -549,7 +557,7 @@ sub communicate ($) {
   # DVD quality = 48k = 49152, CD = 44.1k = 50×294×3  = 44100, tape = 32k = 32768, AM radio = 22.05k (= 22050?), phone = 8k = 8192
   # Passing most of these to --bit-rate doesn't actually work; in particular, setting it to 8k will appear to work but produce silence.
   # Default rate seems to be 22050, but explicitly setting it to 22050 will give "Setting bit rate failed: prop"; I hate Apple.
-  my @opts = ('--file-format', 'WAVE', '--data-format', 'ulaw', '-o', $temp_file) if $broadcast_mode_p;
+  my @opts = (macos_p? ('--file-format', 'WAVE', '--data-format', 'ulaw', '-o', $temp_file): ('-w', $temp_file)) if $broadcast_mode_p;
   my $pause = '[[slnc 1000]]' if macos_p;
   if (!$speak_mode_p) {
     log_output $s if $debug;
@@ -564,7 +572,7 @@ sub communicate ($) {
   } elsif (macos_p) {
     @cmd = ('say', @opts, '-v', preferred_English_voice, $s, $pause);
   } else {
-    @cmd = ('espeak', $s);
+    @cmd = ('espeak', @opts, '-v', preferred_English_voice, $s);
   }
   if (@cmd) {
     run_cmd @cmd, RUN_CMD__IGNORE_ERRORS;
@@ -1068,8 +1076,14 @@ sub enter_infinite_loop () {
       $sleep_time = $dt/2;
       $sleep_time = 1 if $sleep_time < 1;
     }
-    # always force at least a 1-second sleep
-    $sleep_time = 1  if !defined $sleep_time || $sleep_time < 1;
+    # clip sleep time to reasonable range
+    if (!defined $sleep_time || $sleep_time < 1) {
+      log_debug "INTERNAL ERROR: invalid sleep time \"$sleep_time\" clipped";
+      $sleep_time = 1;
+    } elsif ($sleep_time > $max_sleep) {
+      log_debug "INTERNAL ERROR: invalid sleep time \"$sleep_time\" clipped";
+      $sleep_time = $max_sleep;
+    }
     log_debug "sleep $sleep_time" if $debug;
     sleep $sleep_time;
   }
