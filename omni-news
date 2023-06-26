@@ -559,6 +559,7 @@ sub communicate ($) {
   # Default rate seems to be 22050, but explicitly setting it to 22050 will give "Setting bit rate failed: prop"; I hate Apple.
   my @opts = (macos_p? ('--file-format', 'WAVE', '--data-format', 'ulaw', '-o', $temp_file): ('-w', $temp_file)) if $broadcast_mode_p;
   my $pause = '[[slnc 1000]]' if macos_p;
+  my $force_temp_file_p = 0;
   if (!$speak_mode_p) {
     log_output $s if $debug;
     printf "%s\n", $s;
@@ -572,7 +573,9 @@ sub communicate ($) {
   } elsif (macos_p) {
     @cmd = ('say', @opts, '-v', preferred_English_voice, $s, $pause);
   } else {
-    @cmd = ('espeak', @opts, '-v', preferred_English_voice, $s);
+    #@cmd = ('espeak', @opts, '-v', preferred_English_voice, $s);
+    push @opts, ('-w', $temp_file) unless $broadcast_mode_p;
+    ($force_temp_file_p, @cmd) = (1, 'pico2wave', @opts, $s);
   }
   if (@cmd) {
     run_cmd @cmd, RUN_CMD__IGNORE_ERRORS;
@@ -583,6 +586,9 @@ sub communicate ($) {
 	@cmd = ('esdplay', '-s', $esd_server, $temp_file);
       }
       run_cmd @cmd;
+    } elsif ($force_temp_file_p) {
+      @cmd = ('esdplay', $temp_file);
+      run_cmd @cmd, RUN_CMD__IGNORE_ERRORS;
     }
   }
 }
@@ -955,7 +961,8 @@ sub announce_current_date () {
 }
 
 sub announce_current_time () {
-  communicate sprintf(($chinese_p? '現在係%s': 'It is now %s'), format_time POSIX::strftime('%H:%M', localtime adjusted_time));
+  # pico2wav needs the period, otherwise there will be no pause after "p.m."
+  communicate sprintf(($chinese_p? '現在係%s': 'It is now %s.'), format_time POSIX::strftime('%H:%M', localtime adjusted_time));
 }
 
 sub enter_infinite_loop () {
