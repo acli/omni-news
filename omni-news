@@ -579,15 +579,12 @@ sub communicate ($) {
   }
   if (@cmd) {
     run_cmd @cmd, RUN_CMD__IGNORE_ERRORS;
-    if ($broadcast_mode_p) {
+    if ($broadcast_mode_p || $force_temp_file_p) {
       if (defined $pa_server) {
 	@cmd = ('paplay', '-s', $pa_server, (defined $pa_sink? ('-d', $pa_sink): ()), $temp_file);
       } else {
 	@cmd = ('esdplay', '-s', $esd_server, $temp_file);
       }
-      run_cmd @cmd;
-    } elsif ($force_temp_file_p) {
-      @cmd = ('esdplay', $temp_file);
       run_cmd @cmd, RUN_CMD__IGNORE_ERRORS;
     }
   }
