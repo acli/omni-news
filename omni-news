@@ -70,6 +70,7 @@ use vars qw( $broadcast_mode_p );
 use vars qw( $quiet_p );
 use vars qw( $buffered_speech_p $buffered_speech );
 use vars qw( $preferred_English_voice );
+use vars qw( $omni_1_p );
 $lang = 'CAN';
 $prov = 'on';
 
@@ -78,6 +79,11 @@ $data_dir = "$ENV{HOME}/.cache/omni-news";
 $temp_file = "$data_dir/temp.wav";
 #$esd_server = 'pingviini';
 ($pa_server, $pa_sink) = ('osmc', 'rtp');
+
+use vars qw( $config_dir $config_file $config_file_fallback $config );
+$config_dir = "$ENV{HOME}/.config/omni-news";
+$config_file = "$config_dir/config";
+$config_file_fallback = "$ENV{HOME}/.omni-newsrc";
 
 use vars qw( $max_staleness );
 $max_staleness = 3*86400; # 3 days - the published schedule spans 2 weeks so in theory this number can be even bigger but just in case
@@ -109,23 +115,29 @@ sub STATE__FOOTER    () { 'FOOTER' }
 # TAG = Tagalog
 # TUR = Turkish
 # VIE = Vietnamese
+#   grep language-tag ~/.cache/omni-news/on.html |cut -d\> -f2|cut -d\< -f1|sort|uniq
 use vars qw( %langs );
 %langs = (
+  #'AMH' => { 'en' => 'Amharic', 'zh' => '?' },			# ?
   #'AKA' => { 'en' => 'Ghanian', 'zh' => '加納文' },		# ?
   'ARA' => { 'en' => 'Arabic', 'zh' => '阿拉伯文' },
   'ARM' => { 'en' => 'Armenian', 'zh' => '亞美尼亞文' },
+  'BEN' => { 'en' => 'Bengali', 'zh' => '孟加拉文' },
   'CAN' => { 'en' => 'Cantonese', 'zh' => '廣東話' },
   #'CPE' => { 'en' => '???', 'zh' => '???' },			# "Phina"?
   #'CPF' => { 'en' => '???', 'zh' => '???' },			# African French?
   'CZE' => { 'en' => 'Czech', 'zh' => '捷克文' },
+  #'DIN' => { 'en' => '???', 'zh' => '???' },
   'EST' => { 'en' => 'Estonian', 'zh' => '愛沙尼亞文' },
   'GRE' => { 'en' => 'Greek', 'zh' => '希臘文' },
+  'HIN' => { 'en' => 'Hindi', 'zh' => '印度文' },
   'HUN' => { 'en' => 'Hungarian', 'zh' => '匈牙利文' },
   'ITA' => { 'en' => 'Italian', 'zh' => '意大利文' },
   'JPN' => { 'en' => 'Japanese', 'zh' => '日文' },
   'KOR' => { 'en' => 'Korean', 'zh' => '韓文' },
   'MAA' => { 'en' => 'Mandarin', 'zh' => '北方話' },
   'MAC' => { 'en' => 'Macedonian', 'zh' => '北馬其頓文' },
+  #'MAL' => { 'en' => '???', 'zh' => '???' },
   'MLT' => { 'en' => 'Maltese', 'zh' => '馬爾他文' },
   'PAN' => { 'en' => 'Punjabi', 'zh' => '旁遮普文' },
   'PER' => { 'en' => 'Persian', 'zh' => '波斯文' },
@@ -138,10 +150,12 @@ use vars qw( %langs );
   'SOM' => { 'en' => 'Somalian', 'zh' => '索馬里文' },
   'SPA' => { 'en' => 'Spanish', 'zh' => '西班牙文' },
   'TAG' => { 'en' => 'Filipino', 'zh' => '菲律賓文' },
+  'TAM' => { 'en' => 'Tamil', 'zh' => '塔米爾文' },
   #'TEL' => { 'en' => 'Telegu', 'zh' => '???' },
   'TUR' => { 'en' => 'Turkish', 'zh' => '土耳其文' },
   'UKR' => { 'en' => 'Ukrainian', 'zh' => '烏克蘭文' },
   'URD' => { 'en' => 'Urdu', 'zh' => '烏爾j都文' },
+  'VIE' => { 'en' => 'Vietnamese', 'zh' => '越南文' },
   #'YOR' => { 'en' => '???', 'zh' => '???' },
 );
 
@@ -256,6 +270,38 @@ sub show_cmd (\@;$) {
 	s/"/\\"/;
 	"\"$_\"";
       }: "\"$_\""): /\s/? "'$_'": $_ } @$cmd) if $debug || $verbose;
+}
+
+# NOTE: this is chimer's version, copied straight from chimer
+# NOTE: modified to act like the current PHP version (root section goes to /, duplicate keys allowed and get stashed into an array)
+sub read_ini ($) {
+  my($input) = @_;
+  my $it;
+  local(*INPUT, $.);
+  if (open(INPUT, '<:utf8', $input)) {
+    for (my $section = '/';;) {
+      my $s = scalar <INPUT>;
+    last unless defined $s;
+      chomp $s;
+      if ($s =~ /^\s*(?:[#\%;]|$)/) {
+        ;
+      } elsif ($s =~ /^\s*\[\s*([^\[\]]+?)\s*\]\s*$/) {
+        $section = $1;
+      } elsif ($s =~ /^\s*([^=]+?)\s*=\s*(.*)/) {
+        if (defined $section) {
+          $it->{$section}->{$1} = [] unless defined $it->{$section}->{$1};
+          push @{$it->{$section}->{$1}}, $2;
+        } else {
+          $it->{$1} = [] unless defined $it->{$1};
+          push @{$it->{$1}}, $2;
+        }
+      } else {
+        warn "$input:$.: Warning: Unknown input \"$s\"\n";
+      }
+    }
+    close INPUT;
+  }
+  return $it;
 }
 
 sub RUN_CMD__IGNORE_ERRORS  () { 1 }
@@ -388,17 +434,31 @@ sub guess_coordinates () {
   my $pid = open(INPUT, '-|');
   die "$0: guess_coordinates: $cmd[0]: fork: $!\n" unless defined $pid;
   if ($pid) {
-    my $re = quotemeta $city;
+    my $re = q{(?=\S)[^()]+(?<=\S)};
     for (;;) {
       my $s = scalar <INPUT>;
     last unless defined $s;
-      chomp;
-      if ($s =~ /^$re \((\d+)d(\d+)' ([NS]) lat, (\d+)d(\d+)' [EW] long/) {
+      chomp $s;
+      if ($s =~ /^($re) \((\d+)d(\d+)' ([NS]) lat, (\d+)d(\d+)' [EW] long/) {	# original hebcal
+	my($det, $lat_deg, $lat_min, $lat_dir, $lon_deg, $lon_min, $lon_dir) = ($1, $2, $3, $4, $5, $6, $7);
+	if ($det eq $city) {
+	  no integer;
+	  $it = {
+		'lat' => ($lat_deg + $lat_min/60)*($lat_dir eq 'N'? 1: -1),
+		'lon' => ($lon_deg + $lon_min/60)*($lon_dir eq 'E'? 1: -1),
+	      };
+	}
+      } elsif ($s =~ /^($re) \((-?\d+(\.\d+)?),(-?\d+(\.\d+)?)  /) {		# new Go-based hebcal (5.8.1)
+	my($det, $lat, $lon) = ($1, $2, $3);
         no integer;
-        $it = {
-              'lat' => ($1 + $2/60)*($3 eq 'N'? 1: -1),
-              'lon' => ($4 + $5/60)*($6 eq 'E'? 1: -1),
-            };
+	if ($det eq $city) {
+	  $it = {
+		'lat' => ($lat + 0),
+		'lon' => ($lon + 0),
+	      };
+	};
+      } else {
+	die "$cmd[0]:$.: Unknown input \"$s\"\n";
       }
     last if defined $it;
     }
@@ -573,9 +633,12 @@ sub communicate ($) {
   } elsif (macos_p) {
     @cmd = ('say', @opts, '-v', preferred_English_voice, $s, $pause);
   } else {
-    #@cmd = ('espeak', @opts, '-v', preferred_English_voice, $s);
+    if (1) {
+    @cmd = ('espeak', @opts, '-v', preferred_English_voice, $s);
+    } else {
     push @opts, ('-w', $temp_file) unless $broadcast_mode_p;
     ($force_temp_file_p, @cmd) = (1, 'pico2wave', @opts, $s);
+    }
   }
   if (@cmd) {
     run_cmd @cmd, RUN_CMD__IGNORE_ERRORS;
@@ -604,16 +667,26 @@ sub feed_url () {
   # OMNI 2 Eastern: https://www.omnitv.ca/tv-schedule/?region=eastern
   # OMNI 2 Pacific: https://www.omnitv.ca/tv-schedule/?region=pacific
   # OMNI 2 Prairies: https://www.omnitv.ca/tv-schedule/?region=prairies
-  return $prov =~ /(?:bc)/i? 'https://int-new.omnitv.ca/tv-schedule/?region=pacific':
+  return $omni_1_p? 'https://www.omnitv.ca/tv-schedule/?region=omni1':
+	 $prov =~ /(?:bc)/i? 'https://www.omnitv.ca/tv-schedule/?region=pacific':
 	 $prov =~ /(?:on)/i? 'https://www.omnitv.ca/tv-schedule/?region=eastern':
 	 $prov =~ /(?:ab)/i? 'https://www.omnitv.ca/tv-schedule/?region=prairies':
-	 'https://www.omnitv.ca/tv-schedule/?region=omni1';
+	 undef;
+}
+
+sub data_file () {
+  my $basename = $omni_1_p? "1.html": "$prov.html";
+  my $data_file;
+  if (!-d $data_dir) {
+    mkdir $data_dir or warn "$0: $data_dir: $!\n";
+  }
+  $data_file = "$data_dir/$basename";
+  return $data_file;
 }
 
 sub get_feed_data (;$) {
   my($force_p) = @_;
   my $data_file;
-  my $basename = "$prov.html";
   state $last_attempted_time;
   my $min_attempt_delay = 600;
   if (defined $last_attempted_time && time - $last_attempted_time < $min_attempt_delay) {	# don't hammer the server
@@ -624,10 +697,7 @@ sub get_feed_data (;$) {
     $data_file = $test_data_file;
     log_debug "using test data from \"$data_file\"" if $debug || $verbose;
   } else {
-    if (!-d $data_dir) {
-      mkdir $data_dir or warn "$0: $data_dir: $!\n";
-    }
-    $data_file = "$data_dir/$basename";
+    $data_file = data_file;
     my $use_cached_data = 0;
     if (!-f $data_file) {
       log_debug 'need to get new data because nothing was cached' if $debug || $verbose;
@@ -792,6 +862,11 @@ sub find_language_program ($$) {
     }
   }
   return [sort { $a->[0] cmp $b->[0] } @found];
+}
+
+sub ignore_program_p ($) {
+  my($program) = @_;
+  return grep { $_ eq $program } @{$config->{''}->{'ignore'}} if defined $config && defined $config->{''}->{'ignore'};
 }
 
 sub QUERY__NEXT () { 'NEXT' }
@@ -1059,6 +1134,8 @@ sub enter_infinite_loop () {
 	log_debug "an announcement would have been made but it's not the main program and we're told to look for that" if $debug || $verbose;
       } elsif ($dt < 0 && $speak_mode_p) { # program already started - don't bother announcing
 	;
+      } elsif (ignore_program_p($next_program)) {
+	log_debug "an announcement would have been made but \"$next_program\" is an ignored program" if $debug || $verbose;
       } else {
 	start_talking;
 	announce_current_time;
@@ -1119,6 +1196,8 @@ EOF
   -I, --data-file=FILE        Use test feed data in specified FILE
 EOF
   print $h <<EOF;
+      --language=CODE         Use the language identified by the specified CODE
+                              (three-letter OMNI News code, not ISO code)
       --loop                  Loop mode (continually announce next program)
   -n, --next                  Display next match instead of all matches
 EOF
@@ -1162,8 +1241,9 @@ GetOptions(
   'b|broadcast' => \$broadcast_mode_p,
   'd|debug+' => \$debug,
   'dry-run' => \$dry_run_p,
-  'province=s' => sub { my($key, $val) = @_; $prov = lc $val; },
+  'prov|province=s' => sub { my($key, $val) = @_; $prov = lc $val; },
   'I|data-file=s' => \$test_data_file,
+  'lang|language=s' => sub { my($key, $val) = @_; $lang = uc $val; },
   'loop' => \$loop_mode_p,
   'n|next' => \$query_next_program_p,
   'once' => \$once_p,
@@ -1175,6 +1255,9 @@ GetOptions(
   'z|zh|chinese' => \$chinese_p,
   'help' => \&usage,
 ) || usage(1);
+
+$config = read_ini $config_file;
+$config = read_ini $config_file_fallback if !defined $config;
 
 die "$0: \"$prov\" does not look like a valid two-letter province code\n" unless $prov =~ /^[a-z]{2}$/;
 $now = adjusted_time;
@@ -1190,20 +1273,25 @@ die "$0: Can't determine coordinates\n" unless defined $coords;
 if ($loop_mode_p) {
   enter_infinite_loop;
 } else {
-  my $data = get_feed_data;
-  log_debug('parsed data is ' . Dumper $data) if $debug;
+  my $something_done_p;
+  for my $pass (1, 2) {
+    my $data = get_feed_data;
+    log_debug('parsed data is ' . Dumper $data) if $debug;
 
-  my $reporting_origin = $now;
-  my $full_listing = find_language_program $data, $reporting_origin;
-  my $listing = filter_listing $full_listing, $reporting_origin;
+    my $reporting_origin = $now;
+    my $full_listing = find_language_program $data, $reporting_origin;
+    my $listing = filter_listing $full_listing, $reporting_origin;
 
-  if ($query_next_program_p && !@{$listing->{'results'}}) {
-    my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($now + 82800); # 23 hours, to avoid DST issues
-    $reporting_origin = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
-    log_debug "no results were found, adjusting reporting origin to $reporting_origin" if $debug || $verbose;
-    $full_listing = find_language_program $data, $reporting_origin;
-    $listing = filter_listing $full_listing, $reporting_origin;
+    if ($query_next_program_p && !@{$listing->{'results'}}) {
+      my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($now + 82800); # 23 hours, to avoid DST issues
+      $reporting_origin = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
+      log_debug "no results were found, adjusting reporting origin to $reporting_origin" if $debug || $verbose;
+      $full_listing = find_language_program $data, $reporting_origin;
+      $listing = filter_listing $full_listing, $reporting_origin;
+    }
+    $something_done_p = display_listing $listing, $reporting_origin;
+  last if $something_done_p;
+    $omni_1_p = 1;
   }
-  display_listing $listing, $reporting_origin
-      or print "No results were found.\n";
+  print "No results were found.\n" if !$something_done_p;
 }
