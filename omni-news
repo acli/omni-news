@@ -866,7 +866,7 @@ sub find_language_program ($$) {
 
 sub ignore_program_p ($) {
   my($program) = @_;
-  return grep { $_ eq $program } @{$config->{''}->{'ignore'}} if defined $config && defined $config->{''}->{'ignore'};
+  return grep { $_ eq $program } @{$config->{'/'}->{'ignore'}} if defined $config && defined $config->{'/'}->{'ignore'};
 }
 
 sub QUERY__NEXT () { 'NEXT' }
@@ -1208,6 +1208,11 @@ EOF
       --province=CODE         Use the province identified by the specified CODE
   -q, --quiet                 Avoid speech synthesis between midnight and 8am
   -s, --speak                 Speak the result instead of displaying it
+EOF
+  print $h <<EOF if $debug;
+      --test-ignore=NAME      Check if program with specified NAME is ignored
+EOF
+  print $h <<EOF;
   -T, --today                 Display today's schedule
 EOF
   print $h <<EOF if $debug;
@@ -1235,6 +1240,9 @@ EOF
   exit $st;
 }
 
+$config = read_ini $config_file;
+$config = read_ini $config_file_fallback if !defined $config;
+
 Getopt::Long::config('bundling');
 GetOptions(
   'A|all' => sub { $lang = undef },
@@ -1249,15 +1257,13 @@ GetOptions(
   'once' => \$once_p,
   'q|quiet' => \$quiet_p,
   's|speak' => \$speak_mode_p,
+  'test-ignore=s' => sub { my($key, $val) = @_; printf(ignore_program_p $val? "\"%s\" is ignored\n": "\"%s\" is not ignored\n", $val); exit(0); },
   'T|today' => \$query_main_program_p,
   'W|what-if=i' => sub { my($key, $val) = @_; $delta_t = $val - time; },
   'v|verbose' => \$verbose,
   'z|zh|chinese' => \$chinese_p,
   'help' => \&usage,
 ) || usage(1);
-
-$config = read_ini $config_file;
-$config = read_ini $config_file_fallback if !defined $config;
 
 die "$0: \"$prov\" does not look like a valid two-letter province code\n" unless $prov =~ /^[a-z]{2}$/;
 $now = adjusted_time;
