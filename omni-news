@@ -1063,6 +1063,7 @@ sub enter_infinite_loop () {
 	"lat=$lat",
 	"lon=$lon",
       )) if $debug || $verbose;
+  log_debug(sprintf '[ignore=%s]', join(',', map { "($_)" } @{$config->{'/'}->{'ignore'}})) if defined $config->{'/'}->{'ignore'};
 
   for (my($data, $main_program, $next_program, $start_time, $end_time, $name, $announced, $expiry, $main_program_p, $last_news_p);;) {
     my $recorded_start_time;
@@ -1128,14 +1129,15 @@ sub enter_infinite_loop () {
     log_debug sprintf "delta to next program = %d (start time %d '%s')", $dt, $start_time, POSIX::strftime('%F %T', localtime $start_time) if $debug;
     if ($dt <= $announcement_delta && (!defined $announced || $announced < $start_time - $announcement_delta)) {
       my $night_p = POSIX::strftime('%H', localtime $now) =~ /^0[0-7]$/;
+      my $program_name = $next_program->{'results'}->[0]->[8] if defined $next_program->{'results'}->[0]->[8]; # FIXME need to convert to proper OO
       if ($quiet_p && $night_p && $speak_mode_p) {
 	log_debug "an announcement would have been made but it's night and we're in quiet mode" if $debug || $verbose;
       } elsif ($query_main_program_p && !$main_program_p) {
 	log_debug "an announcement would have been made but it's not the main program and we're told to look for that" if $debug || $verbose;
       } elsif ($dt < 0 && $speak_mode_p) { # program already started - don't bother announcing
 	;
-      } elsif (ignore_program_p($next_program)) {
-	log_debug "an announcement would have been made but \"$next_program\" is an ignored program" if $debug || $verbose;
+      } elsif (ignore_program_p($program_name)) {
+	log_debug sprintf "an announcement would have been made but \"%s\" is ignored", $program_name if $debug || $verbose;
       } else {
 	start_talking;
 	announce_current_time;
