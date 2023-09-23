@@ -497,8 +497,8 @@ sub format_date ($$$) {
   return $s;
 }
 
-sub format_time ($) {
-  my($time) = @_;
+sub format_time ($;$) {
+  my($time, $short_p) = @_;
   my($hour, $minute) = $time =~ /^(\d\d):(\d\d)$/? ($1 + 0, $2 + 0): $time =~ /^(\d+)$/? ($time/60, $time%60): undef;
   ($_, $_, $_, my $mday, my $mon, my $year) = localtime $now;
   my $midnight_today = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
@@ -528,11 +528,13 @@ sub format_time ($) {
     }
   } else {
     my($fmt1, $fmt2) = $speak_mode_p? (sub { in_words($_[0]) }, sub { in_words($_[0]) }): ('%2d:', '%02d');
-    my($am, $pm, $noon, $midnight) = $speak_mode_p? ('a.m.', 'p.m.', 'noon', 'midnight'): ('am', 'pm', 'pm', 'am');
+    # mimic3 speaks "pm" (consonant cluster with no vowel) even with periods if written "p.m."
+    # since we are calculating sunrise and sunset, it's best to avoid a.m. and p.m. completely
+    my($am, $pm, $noon, $midnight) = $speak_mode_p? ('in the morning', ($after_sunset_p? 'in the evening': 'in the afternoon'), 'noon', 'midnight'): ('am', 'pm', 'pm', 'am');
     my $display_hour = ($hour + 11)%12 + 1;
     $it = ref $fmt1? &$fmt1($display_hour) . ' ': sprintf($fmt1, $display_hour);
     $it .= ref $fmt2? &$fmt2($minute) . ' ': sprintf($fmt2, $minute) if !$speak_mode_p || $minute;
-    $it .= ($hour == 0? $midnight: $hour < 12? $am: $hour == 12? $noon: $pm);
+    $it .= ($hour == 0? $midnight: $hour < 12? $am: $hour == 12? $noon: $pm) unless $short_p;
   }
   return $it;
 }
@@ -626,7 +628,7 @@ sub communicate ($) {
   } elsif ($buffered_speech_p) {
     $buffered_speech .= '。' if $chinese_p && defined $buffered_speech && $buffered_speech !~ /(?:，|。|！|？)$/s;
     $buffered_speech .= $s =~ /^[a-z]/? ';': '.' if !$chinese_p && defined $buffered_speech && $buffered_speech !~ /[\.,:;!\?]$/s;
-    $buffered_speech .= ' ' if !$chinese_p && defined $buffered_speech && $buffered_speech !~ /\s$/s;
+    $buffered_speech .= '. ' if !$chinese_p && defined $buffered_speech && $buffered_speech !~ /[\.]\s*$/s;
     $buffered_speech .= $s;
   } elsif (macos_p && $chinese_p) {
     @cmd = ('say', @opts, '-v', 'Sin-Ji', $s, $pause);
@@ -949,8 +951,8 @@ sub filter_listing ($$;$) {
   return $it;
 }
 
-sub display_listing ($$) {
-  my($filtered_data, $t) = @_;
+sub display_listing ($$;$) {
+  my($filtered_data, $t, $short_p) = @_;
   my $type = $filtered_data->{'type'};
   my $data = $filtered_data->{'results'};
   my $all_same_channel_p = $filtered_data->{'all-same-channel-p'};
@@ -963,7 +965,7 @@ sub display_listing ($$) {
     my $comment;
     if ($flag == FLAG__TODAYS_SCHEDULE) {
       if ($chinese_p) {
-	my $tmp = format_time($end_time);
+	my $tmp = format_time($end_time, $short_p);
 	$tmp =~ s/午夜|凌晨|上午|中午|下午|晚上//;
 	if (!$something_done_p) {
 	  $lead .= format_date($month, $day, $dow);
@@ -972,7 +974,7 @@ sub display_listing ($$) {
 	  $lead .= format_language($lang) if defined $lang;
 	  $lead .= sprintf("%s：\n", ($type eq RESULT__MAIN_SEGMENT? '主要新聞時段': $type eq RESULT__LAST_NEWS_BROADCAST? '新聞時段': '節目'));
 	}
-	$lead .= sprintf('%s%s%s', format_time($time), ($speak_mode_p? '至': '～'), $tmp);
+	$lead .= sprintf('%s%s%s', format_time($time, 1), ($speak_mode_p? '至': '～'), $tmp);
 	$lead .= sprintf('喺 %s 播放', format_channel $channel) unless $all_same_channel_p;
 	$lead .= '：'
       } else {
@@ -983,7 +985,7 @@ sub display_listing ($$) {
 	  $lead .= sprintf(' on %s', format_channel $channel) if $all_same_channel_p;
 	  $lead .= ":\n";
 	}
-	$lead .= format_time($time);
+	$lead .= format_time($time, $short_p);
 	$lead .= sprintf(' on %s', format_channel $channel) unless $all_same_channel_p;
 	$lead .= ': ';
 	if (defined $duration && $duration) {
@@ -996,7 +998,7 @@ sub display_listing ($$) {
 	$lead .= '跟住係，' if $something_done_p;
 	$lead .= sprintf('%s ', format_channel $channel) unless $all_same_channel_p;
 	$lead .= '下一個節目係，' unless $something_done_p;
-	$lead .= sprintf('%s播放，', format_time($time));
+	$lead .= sprintf('%s播放，', format_time($time, $short_p));
 	if (defined $duration && $duration) {
 	  $lead .= sprintf('%s嘅，', format_duration($duration)) unless defined $annotated{$name} && $annotated{$name} == $duration;
 	  $annotated{$name} = $duration;
@@ -1004,7 +1006,7 @@ sub display_listing ($$) {
       } elsif ($something_done_p) {
 	$lead .= 'followed by ';
       } else {
-	$lead .= sprintf('Next at %s', format_time $time);
+	$lead .= sprintf('Next at %s', format_time $time, $short_p);
 	$lead .= sprintf(' on %s', format_channel $channel) unless $all_same_channel_p;
 	$lead .= ': ';
       }
@@ -1012,11 +1014,11 @@ sub display_listing ($$) {
       if ($chinese_p) {
 	$lead .= sprintf('%s ', format_channel $channel) unless $all_same_channel_p;
 	$lead .= '現正播放嘅節目係：';
-	$comment = sprintf('，直至%s', format_time($end_time));
+	$comment = sprintf('，直至%s', format_time($end_time, $short_p));
       } else {
 	$lead = 'Currently on';
 	$lead .= sprintf(' %s', format_channel $channel) unless $all_same_channel_p;
-	$lead .= sprintf(', until %s', format_time($end_time));
+	$lead .= sprintf(', until %s', format_time($end_time, $short_p));
 	$lead .= ': ';
       }
     }
@@ -1141,7 +1143,7 @@ sub enter_infinite_loop () {
       } else {
 	start_talking;
 	announce_current_time;
-	display_listing $next_program, $now;
+	display_listing $next_program, $now, 1;	# use short times because we just announced a full time
 	if ($main_program_p) {
 	  communicate($chinese_p? '呢個係今日嘅主要新聞時段': "This is today's main broadcast");
 	} elsif ($last_news_p) {
