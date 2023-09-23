@@ -536,7 +536,7 @@ sub format_time ($;$) {
     $it .= ref $fmt2? &$fmt2($minute) . ' ': sprintf($fmt2, $minute) if !$speak_mode_p || $minute;
     $it .= ($hour == 0? $midnight: $hour < 12? $am: $hour == 12? $noon: $pm) unless $short_p;
   }
-  return $it;
+  return $it =~ s/\s+$//sr;
 }
 
 sub format_duration ($) {
@@ -622,13 +622,18 @@ sub communicate ($) {
   my @opts = (macos_p? ('--file-format', 'WAVE', '--data-format', 'ulaw', '-o', $temp_file): ('-w', $temp_file)) if $broadcast_mode_p;
   my $pause = '[[slnc 1000]]' if macos_p;
   my $force_temp_file_p = 0;
+  if ($speak_mode_p) {
+    # stupid hacks to make TTS do the right thing
+    $s =~ s/\bOMNI\b/Omni/sg;
+    $s .= ' ' if $s =~ /\.$/s;
+  }
   if (!$speak_mode_p) {
     log_output $s if $debug;
     printf "%s\n", $s;
   } elsif ($buffered_speech_p) {
     $buffered_speech .= '。' if $chinese_p && defined $buffered_speech && $buffered_speech !~ /(?:，|。|！|？)$/s;
-    $buffered_speech .= $s =~ /^[a-z]/? ';': '.' if !$chinese_p && defined $buffered_speech && $buffered_speech !~ /[\.,:;!\?]$/s;
-    $buffered_speech .= '. ' if !$chinese_p && defined $buffered_speech && $buffered_speech !~ /[\.]\s*$/s;
+    $buffered_speech .= $s =~ /^[a-z]/? ';': '.' if !$chinese_p && defined $buffered_speech && $buffered_speech !~ /[\.,:;!\?]\s*$/s;
+    $buffered_speech .= ' ' if !$chinese_p && defined $buffered_speech && $buffered_speech !~ /\s$/s;
     $buffered_speech .= $s;
   } elsif (macos_p && $chinese_p) {
     @cmd = ('say', @opts, '-v', 'Sin-Ji', $s, $pause);
@@ -987,7 +992,7 @@ sub display_listing ($$;$) {
 	}
 	$lead .= format_time($time, $short_p);
 	$lead .= sprintf(' on %s', format_channel $channel) unless $all_same_channel_p;
-	$lead .= ': ';
+	$lead .= $speak_mode_p? '. ': ': ';
 	if (defined $duration && $duration) {
 	  $comment = sprintf(' (%s)', format_duration $duration) unless defined $annotated{$name} && $annotated{$name} == $duration;
 	  $annotated{$name} = $duration;
@@ -1008,7 +1013,7 @@ sub display_listing ($$;$) {
       } else {
 	$lead .= sprintf('Next at %s', format_time $time, $short_p);
 	$lead .= sprintf(' on %s', format_channel $channel) unless $all_same_channel_p;
-	$lead .= ': ';
+	$lead .= $speak_mode_p? '. ': ': ';
       }
     } elsif ($flag == FLAG__CURRENT_PROGRAM) {
       if ($chinese_p) {
@@ -1031,7 +1036,7 @@ sub display_listing ($$;$) {
 
 sub announce_current_date () {
   my($month, $day, $dow) = ($1 + 0, $2 + 0, $3 + 0) if strftime('%m %e %w', localtime adjusted_time) =~ /^(\d+)\s+(\d+)\s+(\d+)/s;
-  communicate sprintf(($chinese_p? '今日係%s': 'Today is %s'), format_date $month, $day, $dow);
+  communicate sprintf(($chinese_p? '今日係%s': 'Today is %s.'), format_date $month, $day, $dow);
 }
 
 sub announce_current_time () {
@@ -1145,9 +1150,9 @@ sub enter_infinite_loop () {
 	announce_current_time;
 	display_listing $next_program, $now, 1;	# use short times because we just announced a full time
 	if ($main_program_p) {
-	  communicate($chinese_p? '呢個係今日嘅主要新聞時段': "This is today's main broadcast");
+	  communicate($chinese_p? '呢個係今日嘅主要新聞時段': "This is today's main broadcast.");
 	} elsif ($last_news_p) {
-	  communicate($chinese_p? '呢個係今日最後一次新聞時段': "This is today's last news broadcast");
+	  communicate($chinese_p? '呢個係今日最後一次新聞時段': "This is today's last news broadcast.");
 	}
 	stop_talking;
 	turn_tv_on if $main_program_p || $last_news_p;
