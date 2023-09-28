@@ -330,6 +330,7 @@ sub run_cmd_real (\@;$) {
   my $st = waitpid($pid, 0);
 
   # Try to be reasonable when it comes to allowing ^C to do its thing but ignoring errors
+  # NOTE: POSIX::WIFEXITED and POSIX::WIFSIGNALED sound like good ideas, in reality they don't work
   if ($st & 127) {
     $msg = sprintf('Command %s killed by signal %d', $cmd->[0], $st & 127);
     $fatal_p = defined $opt && ($opt & RUN_CMD__IGNORE_SIGNALS);
