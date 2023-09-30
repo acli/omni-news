@@ -626,6 +626,7 @@ sub communicate ($) {
   if ($speak_mode_p) {
     # stupid hacks to make TTS do the right thing
     $s =~ s/\bOMNI\b/Omni/sg;
+    $s =~ s/(?<=\btele)(?=kids)/-/sgi;
     $s .= ' ' if $s =~ /\.$/s;
   }
   if (!$speak_mode_p) {
