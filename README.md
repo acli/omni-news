@@ -16,13 +16,13 @@ The schedule is cached and only downloaded every few days to minimize server loa
 
 Around December 2022, OMNI TV changed its schedule to include actual machine-readable language tags
 (their own inventions, not anything standard like ISO 639 or MARC codes).
-In theory, this means the script should be able to check for programs in other languages
-but this is not tested because my family only watches Cantonese news.
+In theory, this means the script should be able to check for programs in other languages.
 
 Known issues
 ------------
 
-Languages other than CAN (Cantonese) are untested and might not work.
+You can’t check for English programming because English programming is on both OMNI 1 and OMNI 2.
+The current code can’t handle both channels at the same time.
 
 The Cantonese name of known programs are hard-coded
 because the master schedules do not contain the non-English names of anything.
