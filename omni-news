@@ -61,6 +61,7 @@ use vars qw( $now );
 use vars qw( $delta_t );
 use vars qw( $chinese_p );
 use vars qw( $loop_mode_p );
+use vars qw( $show_languages_p );
 use vars qw( $once_p );
 use vars qw( $dry_run_p );
 use vars qw( $query_next_program_p );
@@ -1180,6 +1181,54 @@ sub enter_infinite_loop () {
   }
 }
 
+sub find_languages () {
+  my %languages;
+  for (my $i = 0; $i < 2; $i += 1) {
+    $omni_1_p = $i;
+    my $data = get_feed_data;
+    for my $j (keys %$data) {
+      my $channel = $data->{$j};
+      for my $k (keys %$channel) {
+	my $day = $channel->{$k};
+	for my $l (keys %$day) {
+	  my $slot = $day->{$l};
+	  if (ref $slot) {		# It could be something weird like "May"
+	    my $lang = $slot->{'lang'};
+	    $languages{$lang}->{$j =~ s/ Channel$//r} = 1 if defined $lang;
+	  }
+	}
+      }
+    }
+  }
+  return \%languages;
+}
+
+sub show_languages () {
+  my $languages = find_languages;
+  my $ui = $chinese_p? 'zh': 'en';
+  my $fmt = "%-4s  %-20s  %s\n";
+  if (%$languages) {
+    printf $fmt, 'Code', 'Language', 'Channel(s)';
+    printf $fmt, '====', '========', '==========';
+    print map { sprintf($fmt, $_, (defined $langs{$_}? $langs{$_}->{$ui}: ''), join(', ', sort keys %{$languages->{$_}})) } sort keys %$languages;
+  } else {
+    print "No languages found.\n";
+  }
+}
+
+sub determine_correct_channel () {
+  my $it;
+  my $languages = find_languages;
+  if (%$languages) {
+    my $det = $languages->{$lang};
+    die "Language $lang not found in schedules for province \U$prov\n" unless defined $det;
+    die "Language $lang is found in both channels. Can't handle this right now. Sorry\n" unless keys %$det == 1;
+    $omni_1_p = (keys %$det)[0] =~ /1/s;
+    log_debug sprintf "Channel for language %s seems to be OMNI %d", $lang, ($omni_1_p? 1: 2) if $debug || $verbose;
+  }
+  return $it;
+}
+
 $SIG{'TERM'} = sub {
   log_debug 'OMNI News monitoring shut down' if $debug || $verbose;
   exit(0);
@@ -1208,6 +1257,7 @@ EOF
   print $h <<EOF;
       --language=CODE         Use the language identified by the specified CODE
                               (three-letter OMNI News code, not ISO code)
+      --languages             Show list of all possible languages in schedule
       --loop                  Loop mode (continually announce next program)
 END
   print $h <<EOF if $debug;
@@ -1267,6 +1317,7 @@ GetOptions(
   'prov|province=s' => sub { my($key, $val) = @_; $prov = lc $val; },
   'I|data-file=s' => \$test_data_file,
   'lang|language=s' => sub { my($key, $val) = @_; $lang = uc $val; },
+  'languages' => \$show_languages_p,
   'loop' => \$loop_mode_p,
   'max-sleep=i' => sub { my($key, $val) = @_; die "Invalid max-sleep $val" unless $val > 0; $max_sleep = $val },
   'n|next' => \$query_next_program_p,
@@ -1292,28 +1343,30 @@ my $coords = guess_coordinates;
 ($lat, $lon) = ($coords->{'lat'}, $coords->{'lon'}) unless defined $lat;
 die "$0: Can't determine coordinates\n" unless defined $coords;
 
+die "--loop and --languages cannot be used together\n" if $loop_mode_p && $show_languages_p;
+
 if ($loop_mode_p) {
+  determine_correct_channel;
   enter_infinite_loop;
+} elsif ($show_languages_p) {
+  show_languages;
 } else {
   my $something_done_p;
-  for my $pass (1, 2) {
-    my $data = get_feed_data;
-    log_debug('parsed data is ' . Dumper $data) if $debug;
+  determine_correct_channel;
+  my $data = get_feed_data;
+  log_debug('parsed data is ' . Dumper $data) if $debug;
 
-    my $reporting_origin = $now;
-    my $full_listing = find_language_program $data, $reporting_origin;
-    my $listing = filter_listing $full_listing, $reporting_origin;
+  my $reporting_origin = $now;
+  my $full_listing = find_language_program $data, $reporting_origin;
+  my $listing = filter_listing $full_listing, $reporting_origin;
 
-    if ($query_next_program_p && !@{$listing->{'results'}}) {
-      my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($now + 82800); # 23 hours, to avoid DST issues
-      $reporting_origin = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
-      log_debug "no results were found, adjusting reporting origin to $reporting_origin" if $debug || $verbose;
-      $full_listing = find_language_program $data, $reporting_origin;
-      $listing = filter_listing $full_listing, $reporting_origin;
-    }
-    $something_done_p = display_listing $listing, $reporting_origin;
-  last if $something_done_p;
-    $omni_1_p = 1;
+  if ($query_next_program_p && !@{$listing->{'results'}}) {
+    my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($now + 82800); # 23 hours, to avoid DST issues
+    $reporting_origin = POSIX::mktime(0, 0, 0, $mday, $mon, $year);
+    log_debug "no results were found, adjusting reporting origin to $reporting_origin" if $debug || $verbose;
+    $full_listing = find_language_program $data, $reporting_origin;
+    $listing = filter_listing $full_listing, $reporting_origin;
   }
-  print "No results were found.\n" if !$something_done_p;
+  $something_done_p = display_listing $listing, $reporting_origin;
+  print "No results were found for language $lang for today.\n" if !$something_done_p;
 }
