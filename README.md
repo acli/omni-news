@@ -27,6 +27,10 @@ The current code can’t handle both channels at the same time.
 The Cantonese name of known programs are hard-coded
 because the master schedules do not contain the non-English names of anything.
 
+Because their language codes are non-standard,
+what a lot of these codes mean is anyone’s guess.
+They don’t really provide a cross reference table or any other kind of explanation anywhere.
+
 Sometimes, after the script downloads a fresh copy of the schedule
 it will not find any schedule for that day.
 This can happen if the TV station has already erased the information for the current week.
