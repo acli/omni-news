@@ -716,7 +716,7 @@ sub get_feed_data (;$) {
   my($force_p) = @_;
   my $data_file;
   state $last_attempted_time;
-  my $min_attempt_delay = 600;
+  my $min_attempt_delay = 30;
   if (defined $test_data_file) {
     $data_file = $test_data_file;
     log_debug "using test data from \"$data_file\"" if $debug || $verbose;
@@ -737,7 +737,7 @@ sub get_feed_data (;$) {
     }
     if (!$use_cached_data) {
       if (defined $last_attempted_time && time - $last_attempted_time < $min_attempt_delay) {	# don't hammer the server
-	log_debug "forcing delay of $min_attempt_delay seconds";
+	log_debug "Waiting $min_attempt_delay seconds before getting the next schedule...";
 	sleep $min_attempt_delay;
       }
       my @cmd = ('wget', '-q', '-O', $data_file, feed_url);
@@ -1245,8 +1245,9 @@ sub show_languages () {
   my $ui = $chinese_p? 'zh': 'en';
   my $fmt = "%-4s  %-15s  %-7s   %s\n";
   if (%$languages) {
-    printf $fmt, 'Code', 'Language', 'Days', 'Channel(s)';
-    printf $fmt, '====', '========', '====', '==========';
+    printf "The following codes currently appear in the schedules for province %s:\n\n", uc $prov;
+    printf $fmt, 'Code', 'Language', 'Days',    'Channel(s)';
+    printf $fmt, '====', '========', '=======', '==========';
     print map { sprintf($fmt, $_,
 			      (defined $langs{$_}? $langs{$_}->{$ui}: ''),
 			      format_dows(keys %{$languages->{$_}->{'dows'}}),
