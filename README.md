@@ -31,7 +31,7 @@ because the master schedules do not contain the non-English names of anything.
 Because their language codes are non-standard,
 what a lot of these codes mean is anyone’s guess.
 They don’t provide a cross reference table,
-aria labels
+ARIA labels
 or really any other kind of explanation anywhere.
 
 Sometimes, after the script downloads a fresh copy of the schedule
@@ -43,6 +43,11 @@ The script can be told to speak in Cantonese,
 but Cantonese speech can only be synthesized on MacOS.
 
 A lot of things are hard-coded, including how to turn the TV on.
+
+The script can turn the TV on (if the hard-coded script exists),
+but it can’t change to the correct channel.
+I only have a basic, dumb settop box;
+it isn’t even visible on the HDMI CEC bus.
 
 Old issues no longer relevant
 -----------------------------
