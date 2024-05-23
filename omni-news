@@ -1257,7 +1257,7 @@ EOF
   print $h <<EOF;
       --language=CODE         Use the language identified by the specified CODE
                               (three-letter OMNI News code, not ISO code)
-      --languages             Show list of all possible languages in schedule
+      --languages             Show a list of all languages in the schedule
       --loop                  Loop mode (continually announce next program)
 END
   print $h <<EOF if $debug;
