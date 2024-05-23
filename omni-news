@@ -1228,6 +1228,18 @@ sub by_dow {
   $dow_numbers{$a} <=> $dow_numbers{$b}
 }
 
+sub format_dows (@) {
+  my @dows = @_;
+  my @it;
+  for my $dow (@dows) {
+    my $i = $dow_numbers{$dow};
+    if (defined $i) {
+      $it[$i] = $dow_codes{$dow}->[0];
+    }
+  }
+  return join('', map { defined $it[$_]? $it[$_]: ' ' } 1..7);	# XXX
+}
+
 sub show_languages () {
   my $languages = find_languages;
   my $ui = $chinese_p? 'zh': 'en';
@@ -1237,7 +1249,7 @@ sub show_languages () {
     printf $fmt, '====', '========', '====', '==========';
     print map { sprintf($fmt, $_,
 			      (defined $langs{$_}? $langs{$_}->{$ui}: ''),
-			      join('', map { $dow_codes{$_}->[0] } sort by_dow keys %{$languages->{$_}->{'dows'}}),
+			      format_dows(keys %{$languages->{$_}->{'dows'}}),
 			      join(', ', sort keys %{$languages->{$_}->{'channels'}}) ) } sort keys %$languages;
 
   } else {
