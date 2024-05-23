@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 # vi:set sw=2 ai sm:
 #
-# Copyright 2021, 2022 by Ambrose Li <ambrose.li@gmail.com>
+# Copyright 2021–2024 by Ambrose Li <ambrose.li@gmail.com>
 # Pull program schedule from OMNI TV's site to try to figure out when news is aired
 # because the time can shift around or news for the day can get cancelled for hockey
 #
@@ -617,6 +617,7 @@ sub start_talking () {
 sub communicate ($) {
   my($s) = @_;
   my @cmd;
+  # NOTE: The following comment applies to MacOS only (my current setup is Ubuntu + RaspOS (Piper) so MacOS is no longer tested):
   # DVD quality = 48k = 49152, CD = 44.1k = 50×294×3  = 44100, tape = 32k = 32768, AM radio = 22.05k (= 22050?), phone = 8k = 8192
   # Passing most of these to --bit-rate doesn't actually work; in particular, setting it to 8k will appear to work but produce silence.
   # Default rate seems to be 22050, but explicitly setting it to 22050 will give "Setting bit rate failed: prop"; I hate Apple.
@@ -633,8 +634,10 @@ sub communicate ($) {
     log_output $s if $debug;
     printf "%s\n", $s;
   } elsif ($buffered_speech_p) {
-    $buffered_speech .= '。' if $chinese_p && defined $buffered_speech && $buffered_speech !~ /(?:，|。|！|？)$/s;
-    $buffered_speech .= $s =~ /^[a-z]/? ';': '.' if !$chinese_p && defined $buffered_speech && $buffered_speech !~ /[\.,:;!\?]\s*$/s;
+    if (defined $buffered_speech) {
+      $buffered_speech .= '。' if $chinese_p && $buffered_speech !~ /(?:，|。|！|？)$/s;
+      $buffered_speech .= $s =~ /^[a-z]/? ';': '.' if !$chinese_p && $buffered_speech !~ /[\.,:;!\?]\s*$/s;
+    }
     $buffered_speech .= ' ' if !$chinese_p && defined $buffered_speech && $buffered_speech !~ /\s$/s;
     $buffered_speech .= $s;
   } elsif (macos_p && $chinese_p) {
@@ -642,12 +645,8 @@ sub communicate ($) {
   } elsif (macos_p) {
     @cmd = ('say', @opts, '-v', preferred_English_voice, $s, $pause);
   } else {
-    if (1) {
+    # This is hard-coded for now. If you have a better TTS program (e.g., Mimic3 or Piper) just write a script and name it espeak
     @cmd = ('espeak', @opts, '-v', preferred_English_voice, $s);
-    } else {
-    push @opts, ('-w', $temp_file) unless $broadcast_mode_p;
-    ($force_temp_file_p, @cmd) = (1, 'pico2wave', @opts, $s);
-    }
   }
   if (@cmd) {
     run_cmd @cmd, RUN_CMD__IGNORE_ERRORS;
@@ -665,6 +664,7 @@ sub communicate ($) {
 sub stop_talking () {
   if ($buffered_speech_p) {
     $buffered_speech_p = 0;
+    $buffered_speech .= '.' if $speak_mode_p && !$chinese_p && $buffered_speech !~ /[\.!\?]['"’”]*\s*$/s;
     communicate $buffered_speech;
   }
   $buffered_speech = undef;
@@ -1173,7 +1173,6 @@ sub enter_infinite_loop () {
       log_debug "INTERNAL ERROR: invalid sleep time \"$sleep_time\" clipped";
       $sleep_time = 1;
     } elsif ($sleep_time > $max_sleep) {
-      log_debug "INTERNAL ERROR: invalid sleep time \"$sleep_time\" clipped";
       $sleep_time = $max_sleep;
     }
     log_debug "sleep $sleep_time" if $debug;
@@ -1210,6 +1209,11 @@ EOF
       --language=CODE         Use the language identified by the specified CODE
                               (three-letter OMNI News code, not ISO code)
       --loop                  Loop mode (continually announce next program)
+END
+  print $h <<EOF if $debug;
+      --max-sleep=N           Clip max sleep() to N seconds (N must be > 1)
+EOF
+  print $h <<EOF;
   -n, --next                  Display next match instead of all matches
 EOF
   print $h <<EOF if $debug;
@@ -1264,6 +1268,7 @@ GetOptions(
   'I|data-file=s' => \$test_data_file,
   'lang|language=s' => sub { my($key, $val) = @_; $lang = uc $val; },
   'loop' => \$loop_mode_p,
+  'max-sleep=i' => sub { my($key, $val) = @_; die "Invalid max-sleep $val" unless $val > 0; $max_sleep = $val },
   'n|next' => \$query_next_program_p,
   'once' => \$once_p,
   'q|quiet' => \$quiet_p,
