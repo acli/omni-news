@@ -14,3 +14,7 @@ The codes are as follows:
 - F = Friday
 - S = Saturday
 - U = Sunday
+
+Similar codes are in common use, except usually Thursday is Th, which makes the code variable-width,
+and usually Sunday would be another S, which makes it ambiguous.
+The Waterloo system, on the other hand, is fixed-width and unambiguous.
