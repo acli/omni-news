@@ -4,7 +4,8 @@ These are days of the week in Waterloo form.
 
 I no longer feel any connection to the University of Waterloo, 
 but I still use their system of 1-letter codes because it’s ultra compact
-and once you learn how to read it, it’s easy to understand.
+and once you learn how to read it, it’s easy to understand
+and it’s unambiguous.
 
 The codes are as follows:
 - M = Monday
@@ -15,6 +16,6 @@ The codes are as follows:
 - S = Saturday
 - U = Sunday
 
-Similar codes are in common use, except usually Thursday is Th, which makes the code variable-width,
-and usually Sunday would be another S, which makes it ambiguous.
-The Waterloo system, on the other hand, is fixed-width and unambiguous.
+Similar codes are in common use, of course —
+except Thursday is usually Th, which makes the code variable-width,
+and Sunday would often be S, which makes it ambiguous.
