@@ -21,7 +21,8 @@ In theory, this means the script should be able to check for programs in other l
 Known issues
 ------------
 
-You can’t check for English programming because English programming is on both OMNI 1 and OMNI 2.
+You can’t check for English programming in a continuous loop
+because English programming is on both OMNI 1 and OMNI 2.
 The current code can’t handle both channels at the same time.
 
 The Cantonese name of known programs are hard-coded

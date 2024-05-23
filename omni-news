@@ -1217,16 +1217,19 @@ sub show_languages () {
 }
 
 sub determine_correct_channel () {
-  my $it;
-  my $languages = find_languages;
-  if (%$languages) {
-    my $det = $languages->{$lang};
-    die "Language $lang not found in schedules for province \U$prov\n" unless defined $det;
-    die "Language $lang is found in both channels. Can't handle this right now. Sorry\n" unless keys %$det == 1;
-    $omni_1_p = (keys %$det)[0] =~ /1/s;
-    log_debug sprintf "Channel for language %s seems to be OMNI %d", $lang, ($omni_1_p? 1: 2) if $debug;
+  if (defined $lang) {
+    my $languages = find_languages;
+    if (%$languages) {
+      my $det = $languages->{$lang};
+      die "Language $lang not found in schedules for province \U$prov\n" unless defined $det;
+      if (keys %$det == 1) {
+	$omni_1_p = (keys %$det)[0] =~ /1/s;
+	log_debug sprintf "Channel for language %s seems to be OMNI %d", $lang, ($omni_1_p? 1: 2) if $debug;
+      } else {
+	die "Language $lang is found in both channels. Please specify --channel before --lang.\n" if !defined $omni_1_p;
+      }
+    }
   }
-  return $it;
 }
 
 $SIG{'TERM'} = sub {
@@ -1249,6 +1252,8 @@ Figure out when OMNI News Cantonese is being aired by checking the scheduile.
   -A, --all                   Match all programs instead of a specific language
   -b, --broadcast             Generate audio files for speech-synthesized
                               announcements to work around network latency
+      --channel=NUMBER        Use specified channel NUMBER (for --all or for
+                              a --language that appears on both channels)
 EOF
   print $h <<EOF if $debug;
       --dry-run               Do not execute any external commands
@@ -1312,6 +1317,7 @@ Getopt::Long::config('bundling');
 GetOptions(
   'A|all' => sub { $lang = undef },
   'b|broadcast' => \$broadcast_mode_p,
+  'ch|chan|channel=i' => sub { my($key, $val) = @_; die "Channel must be 1 or 2\n" if $val != 1 && $val != 2; $omni_1_p = $val == 1? 1: 0 },
   'd|debug+' => \$debug,
   'dry-run' => \$dry_run_p,
   'prov|province=s' => sub { my($key, $val) = @_; $prov = lc $val; },
