@@ -16,7 +16,8 @@ The schedule is cached and only downloaded every few days to minimize server loa
 
 Around December 2022, OMNI TV changed its schedule to include actual machine-readable language tags
 (their own inventions, not anything standard like ISO 639 or MARC codes).
-In theory, this means the script should be able to check for programs in other languages.
+In theory, this means the script should be able to check for programs in other languages,
+but for technical reasons English is only half working.
 
 Known issues
 ------------
