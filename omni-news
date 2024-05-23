@@ -717,10 +717,6 @@ sub get_feed_data (;$) {
   my $data_file;
   state $last_attempted_time;
   my $min_attempt_delay = 600;
-  if (defined $last_attempted_time && time - $last_attempted_time < $min_attempt_delay) {	# don't hammer the server
-    log_debug "forcing delay of $min_attempt_delay seconds";
-    sleep $min_attempt_delay;
-  }
   if (defined $test_data_file) {
     $data_file = $test_data_file;
     log_debug "using test data from \"$data_file\"" if $debug || $verbose;
@@ -740,6 +736,10 @@ sub get_feed_data (;$) {
       $use_cached_data = 1;
     }
     if (!$use_cached_data) {
+      if (defined $last_attempted_time && time - $last_attempted_time < $min_attempt_delay) {	# don't hammer the server
+	log_debug "forcing delay of $min_attempt_delay seconds";
+	sleep $min_attempt_delay;
+      }
       my @cmd = ('wget', '-q', '-O', $data_file, feed_url);
       $last_attempted_time = time unless $force_p;
       show_cmd @cmd;
