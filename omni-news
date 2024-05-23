@@ -160,7 +160,7 @@ use vars qw( %langs );
   #'YOR' => { 'en' => '???', 'zh' => '???' },
 );
 
-use vars qw( %months %dows );
+use vars qw( %months %dows %dow_numbers %dow_codes );
 %months = (
   'Jan' => ['January', '一月'],
   'Feb' => ['February', '二月'],
@@ -183,6 +183,24 @@ use vars qw( %months %dows );
   'Friday' => ['Friday', '星期五'],
   'Saturday' => ['Saturday', '星期六'],
   'Sunday' => ['Sunday', '星期日'],
+);
+%dow_numbers = (
+  'Monday' => 1,
+  'Tuesday' => 2,
+  'Wednesday' => 3,
+  'Thursday' => 4,
+  'Friday' => 5,
+  'Saturday' => 6,
+  'Sunday' => 7,
+);
+%dow_codes = (
+  'Monday' => ['M', '一'],
+  'Tuesday' => ['T', '二'],
+  'Wednesday' => ['W', '三'],
+  'Thursday' => ['R', '四'],
+  'Friday' => ['F', '五'],
+  'Saturday' => ['S', '六'],
+  'Sunday' => ['U', '日'],
 );
 
 use vars qw( %words );
@@ -1194,7 +1212,10 @@ sub find_languages () {
 	  my $slot = $day->{$l};
 	  if (ref $slot) {		# It could be something weird like "May"
 	    my $lang = $slot->{'lang'};
-	    $languages{$lang}->{$j =~ s/ Channel$//r} = 1 if defined $lang;
+	    if (defined $lang) {
+	      $languages{$lang}->{'channels'}->{$j =~ s/ Channel$//r} = 1;
+	      $languages{$lang}->{'dows'}->{$day->{'dow'}} = 1;
+	    }
 	  }
 	}
       }
@@ -1203,14 +1224,22 @@ sub find_languages () {
   return \%languages;
 }
 
+sub by_dow {
+  $dow_numbers{$a} <=> $dow_numbers{$b}
+}
+
 sub show_languages () {
   my $languages = find_languages;
   my $ui = $chinese_p? 'zh': 'en';
-  my $fmt = "%-4s  %-20s  %s\n";
+  my $fmt = "%-4s  %-15s  %-7s  %s\n";
   if (%$languages) {
-    printf $fmt, 'Code', 'Language', 'Channel(s)';
-    printf $fmt, '====', '========', '==========';
-    print map { sprintf($fmt, $_, (defined $langs{$_}? $langs{$_}->{$ui}: ''), join(', ', sort keys %{$languages->{$_}})) } sort keys %$languages;
+    printf $fmt, 'Code', 'Language', 'Days', 'Channel(s)';
+    printf $fmt, '====', '========', '====', '==========';
+    print map { sprintf($fmt, $_,
+			      (defined $langs{$_}? $langs{$_}->{$ui}: ''),
+			      join('', map { $dow_codes{$_}->[0] } sort by_dow keys %{$languages->{$_}->{'dows'}}),
+			      join(', ', sort keys %{$languages->{$_}->{'channels'}}) ) } sort keys %$languages;
+
   } else {
     print "No languages found.\n";
   }
