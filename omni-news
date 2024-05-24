@@ -1306,7 +1306,7 @@ EOF
                               (three-letter OMNI News code, not ISO code)
       --languages             Show a list of all languages in the schedule
       --loop                  Loop mode (continually announce next program)
-END
+EOF
   print $h <<EOF if $debug;
       --max-sleep=N           Clip max sleep() to N seconds (N must be > 1)
 EOF
