@@ -1264,10 +1264,10 @@ sub determine_correct_channel () {
     if (%$languages) {
       my $det = $languages->{$lang};
       die "Language $lang not found in schedules for province \U$prov\n" unless defined $det;
-      if (keys %$det == 1) {
-	$omni_1_p = (keys %$det)[0] =~ /1/s;
+      if (keys %{$det->{'channels'}} == 1) {
 	log_debug sprintf "Channel for language %s seems to be OMNI %d", $lang, ($omni_1_p? 1: 2) if $debug;
       } else {
+      print STDERR Dumper $det;
 	die "Language $lang is found in both channels. Please specify --channel before --lang.\n" if !defined $omni_1_p;
       }
     }
