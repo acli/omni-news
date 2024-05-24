@@ -27,7 +27,7 @@ because English programming is on both OMNI 1 and OMNI 2.
 The current code can’t handle both channels at the same time.
 
 The Cantonese name of known programs are hard-coded
-because the master schedules do not contain the non-English names of anything.
+because the master schedules do not contain the names of anything that’s not written in the Latin alphabet.
 
 Because their language codes are non-standard,
 what a lot of these codes mean is anyone’s guess.
